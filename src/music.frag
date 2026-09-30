@@ -11,8 +11,9 @@ out vec4 o;
 const int D[48] = int[](53,57,60,64, 53,57,60,62, 53,57,58,62, 55,57,61,64, 38,34,31,33,
 	67,57,42,2,27,41,60,67,57,42,26,44,66,98,107,97,82,66,43,65,84,99,81,58,42,36,58,2);
 
-// MIDI note -> angular frequency
-float freq(float n) { return 51.37 * exp2(n / 12.); }
+// phase (radians) of MIDI note n at time t, reduced to one period: sin() and
+// cos() of large arguments are inaccurate on some GPUs
+float freq(float n, float t) { return fract(8.1758 * exp2(n / 12.) * t) * 6.2832; }
 
 float noise(int i)
 {
@@ -50,14 +51,14 @@ vec2 song(int i)
 		s = vec2(0);
 
 	// rolling bass: the three 16ths after each kick
-	x = freq(D[16 + (bar >> 1 & 3)] + (sb & 3) / 3 * 12) * ts;
+	x = freq(D[16 + (bar >> 1 & 3)] + (sb & 3) / 3 * 12, ts);
 	s += float(sec & 0x1F3FC) / sec * sign(sb & 3) * sin(x + 2. * exp(-ts * 20.) * sin(x)) * exp(-ts * 8.) * min(ts * 300., 1.) * smoothstep(.125, .11, ts) * .45;
 
 	// pad: current chord plus the release of the previous one
 	for (int c = 0; c < 2; c++) {
 		x = tc + c * 4.;
 		for (int k = 0; k < 12; k++)
-			s += saw(freq(D[((bar >> 1) - c & 3) * 4 + k / 3]) * (1. + (k % 3 - 1) * .004) * x + k, .3 + .3 * smoothstep(8., 24., bars) + .15 * drop) *
+			s += saw(freq(D[((bar >> 1) - c & 3) * 4 + k / 3] + (k % 3 - 1) * .07, x) + k, .3 + .3 * smoothstep(8., 24., bars) + .15 * drop) *
 				smoothstep(0., 1.5, x) * smoothstep(4.8, 4., x) * vec2(1. - k % 3 * .4, .2 + k % 3 * .4) * .22;
 	}
 
@@ -65,7 +66,7 @@ vec2 song(int i)
 	for (int k = 0; k < 4; k++) {
 		int s2 = max(st - 3 * k, 0), q = s2 & 7;
 		if ((s2 & 16) > 0) q = 7 - q;
-		x = freq(D[(s2 >> 5 & 3) * 4 + (q & 3)] + 12 + q / 4 * 12) * ts;
+		x = freq(D[(s2 >> 5 & 3) * 4 + (q & 3)] + 12 + q / 4 * 12, ts);
 		s += sin(x + (.5 + 1.5 * smoothstep(4., 24., bars)) * exp(-ts * 12.) * sin(2. * x)) * exp(-ts * 10.) * smoothstep(.125, .11, ts) *
 			min(ts * 300., 1.) * pow(.45, k) * (.65 + vec2(.35, -.35) * (k < 1 ? 0. : k % 2 * 2. - 1.)) *
 			float(sec & 0x3FFFE) / sec * (.4 + .6 * smoothstep(16., 24., bars)) * .2;
@@ -80,8 +81,8 @@ vec2 song(int i)
 			int d = D[j] & 7;
 			if (ms < acc + d * 2) {
 				y = (ms - acc) * .125 + ts;
-				x = freq(D[j] / 8 + 69) * (y + sin(y * 35.) * smoothstep(.15, .5, y) * .0002);
-				s += (saw(x, .7) + saw(x * 1.006 + 1., .7)) * min(y * 50., 1.) * smoothstep(d * .25, d * .25 - .04, y) *
+				x = y + sin(y * 35.) * smoothstep(.15, .5, y) * .0002;   // vibrato
+				s += (saw(freq(D[j] / 8 + 69, x), .7) + saw(freq(D[j] / 8 + 69.1, x) + 1., .7)) * min(y * 50., 1.) * smoothstep(d * .25, d * .25 - .04, y) *
 					(.6 + .4 * exp(-y * 3.)) * pow(.4, k) * (.65 + vec2(.35, -.35) * (k < 1 ? 0. : k % 2 * 2. - 1.)) * .7;
 				break;
 			}
