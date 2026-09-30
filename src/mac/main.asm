@@ -9,6 +9,12 @@ DEFAULT REL
 extern _dlopen, _dlsym
 global _main
 
+%ifidn __OUTPUT_FORMAT__, macho64
+%define GOT(x) [rel x wrt ..gotpcrel]
+%else                           ; ELF, for tools/macsim
+%define GOT(x) [rel x wrt ..got]
+%endif
+
 ROWS    equ SONG_SAMPLES / 2048 + 1
 CHUNK   equ 4096                ; stereo frames per audio buffer
 SONG_MS equ SONG_SAMPLES * 10 / 441
@@ -70,7 +76,7 @@ _main:
 	mov rdi, r12
 	push 1
 	pop rsi
-	call [rel _dlopen wrt ..gotpcrel]
+	call GOT(_dlopen)
 	mov r14, rax
 .skip:
 	mov al, [r12]
@@ -81,7 +87,7 @@ _main:
 	je .endlib
 	mov rdi, r14
 	mov rsi, r12
-	call [rel _dlsym wrt ..gotpcrel]
+	call GOT(_dlsym)
 	mov [r13], rax
 	add r13, 8
 	jmp .skip
