@@ -262,8 +262,27 @@ Steps (each one a PR):
    `system_profiler SPDisplaysDataType`, `tar --version`, whether
    `tar t </dev/null` reads stdin, and whether the current `dist/brana-macos`
    starts at all (the lzma-alone dropper has never run on a real Mac).
-1. **Done (this PR):** `tools/mac/macbench`, measurements on the real GPU. Next:
-   `tools/mac/test.sh` with intro variants for the container savings of step 2.
+1. **Done:**
+   - `tools/mac/macbench`, measurements on the real GPU (PR #8);
+   - `tools/mac/test.sh` (PR #9). It downloads the intro variants in
+     `tools/mac/test/` (built by `tools/mac/testbuild.py`), runs each for 8 s
+     and reports which ones start.
+   Variants and their packed size:
+   | variant | change | size |
+   |---|---|---|
+   | `base` | the release build | 4091 |
+   | `noexp` | `ld64.lld -no_exported_symbols` | 4028 |
+   | `notrail` | + tar without end-of-archive blocks | 4010 |
+   | `nodic` | + no `LC_DATA_IN_CODE`, no `__got`/`__bss` headers | 3977 |
+   | `nosym` | + zeroed symbol tables | 3951 |
+   | `notext` | + no `__text` header | 3921 |
+   | `loc0` | base, uniform location 0 | 4067 |
+   | `short` | base, short framework paths | 4082 |
+   | `hdr1` | base, `tail -n+3 "$0"\|tar -xf - -C/tmp;exec /tmp/a` | 4089 |
+   | `hdr2` | base, `tail -n+3 "$0"\|tar x -C/tmp;/tmp/a` | 4080 |
+
+   The first six are cumulative. The Mach-O edits are done by
+   `tools/mac/machopp.py`, one option per change.
 2. macOS container savings, measured by a design review (bytes):
    - tar without the end-of-archive blocks: −20;
    - `ld64.lld -no_exported_symbols`: −61;
@@ -387,11 +406,11 @@ Also requested:
 | `tools/check_shaders.sh` | Minified shaders must give **bit-identical** audio and frames (compat), and compile in a 3.3 core context (macOS path). Uses the default GL driver, so on the NVIDIA PC it is also the NVIDIA compile check; prints the driver's log on failure. |
 | `tools/build_win.sh`, `build_linux.sh`, `build_mac.sh`, `xzbest.sh` | Per-platform builds. `xzbest.sh` grid-searches LZMA encoder parameters. |
 | `tools/preview.c` | Dev harness: renders the music to a WAV and frames to PPM or a raw stream, through the same GL paths (compat or `-core`). |
-| `tools/mac/` | `macbench` (Mac GPU measurements, section 3.4), its source, build script and variant generator. |
+| `tools/mac/` | `macbench` (Mac GPU measurements), `test.sh` + `test/` + `testbuild.py` + `machopp.py` (which byte savings a real Mac accepts); section 3.4. |
 | `tools/diag.c`, `tools/brana-diag` | Linux diagnostic: replays the intro's startup and prints the GL driver, the music shader's link log, whether the rendered music matches the reference, and the ALSA setup; then plays 2 × 8 s and saves `brana-diag.wav`. Embeds the minified shader: rebuild it when `music.frag` changes. |
 | `tools/bench.py`, `tools/flicker.py`, `tools/inside.py`, `tools/audiocmp.py` | GPU cost per scene, temporal flicker metric, pixels whose ray ends inside a solid (must stay 0), recording-vs-reference audio comparison. |
 | `tools/analyze_audio.py`, `tools/contact.py`, `tools/stems.py` | Per-bar audio levels and spectrogram, contact sheets of frames, per-instrument stems (stale). |
-| `tools/macsim/` | Runs the macOS machine code on Linux: the same asm assembled as ELF, with fake GLUT, OpenGL and AudioToolbox libraries installed at the macOS framework paths (needs root for `/System`). |
+| `tools/macsim/` | Runs the macOS machine code on Linux: the same asm assembled as ELF (`-DFWDIR` points the name table at fake GLUT, OpenGL and AudioToolbox libraries in the build directory; no root needed). `ASM=` builds another copy of `main.asm`. The fake AudioQueue plays at real-time speed even into ALSA's null or file devices. |
 | `README.md` | User documentation, **in Slovak**. Keep it in sync: size table, testing notes. |
 
 ### 5.3 Music (`src/music.frag`)

@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <unistd.h>
 
 typedef struct {
 	unsigned capacity;
@@ -31,6 +33,7 @@ static int head, tail;
 static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
 static long total;
+static struct timespec t0;
 
 int AudioQueueNewOutput(const ASBD *f, Callback c, void *user, void *rl, void *mode, unsigned flags, void **q)
 {
@@ -82,6 +85,13 @@ static void *player(void *arg)
 		pthread_mutex_unlock(&mu);
 		snd_pcm_writei(pcm, b->data, b->size / 8);
 		total += b->size / 8;
+		// like a real sound device: never more than 0.1 s ahead of the wall clock
+		// (the ALSA null or file devices take data at any speed)
+		struct timespec now;
+		clock_gettime(CLOCK_MONOTONIC, &now);
+		if (!t0.tv_sec) t0 = now;
+		double ahead = total / 44100. - ((now.tv_sec - t0.tv_sec) + (now.tv_nsec - t0.tv_nsec) * 1e-9);
+		if (ahead > .1) usleep((useconds_t)((ahead - .1) * 1e6));
 		cb(cb_user, (void *)0x1234, b);
 	}
 	return arg;

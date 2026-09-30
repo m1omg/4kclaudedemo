@@ -334,7 +334,11 @@ uname:  db "u", 0
 vertex:
 	db "#version 330", 10, "void main(){gl_Position=vec4(gl_VertexID%2*4-1,gl_VertexID/2*4-1,0,1);}", 0
 
+%ifdef FWDIR                    ; tools/macsim: fake frameworks in another directory
+%define FW(x) FWDIR, x, ".framework/Versions/A/", x, 0
+%else
 %define FW(x) "/System/Library/Frameworks/", x, ".framework/Versions/A/", x, 0
+%endif
 names:
 	db FW("GLUT")
 	db "glutInit", 0, "glutInitDisplayMode", 0, "glutCreateWindow", 0, "glutFullScreen", 0
