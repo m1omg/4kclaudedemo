@@ -11,9 +11,9 @@ a na konci sa vráti na horizont, kde sa všetko pomaly ponorí späť do tmy.
 
 | Súbor | Platforma | Veľkosť |
 |---|---|---|
-| [`dist/brana-windows.exe`](dist/brana-windows.exe) | Windows (32-bit exe, beží aj na 64-bit) | 3183 B |
-| [`dist/brana-linux`](dist/brana-linux) | Linux x86-64 (glibc) | 4013 B |
-| [`dist/brana-macos`](dist/brana-macos) | macOS 10.13+ na Intel Macu | 4081 B |
+| [`dist/brana-windows.exe`](dist/brana-windows.exe) | Windows (32-bit exe, beží aj na 64-bit) | 3232 B |
+| [`dist/brana-linux`](dist/brana-linux) | Linux x86-64 (glibc) | 4010 B |
+| [`dist/brana-macos`](dist/brana-macos) | macOS 10.13+ na Intel Macu | 4076 B |
 
 ## Spustenie
 
@@ -151,6 +151,17 @@ sudo apt install python3 glslang-tools nasm xz-utils clang lld llvm wine wine32:
 CRINKLER=/cesta/k/Crinkler.exe ./build.sh
 ```
 
+Na CachyOS/Arch (zostavenie vyskúšané na CachyOS):
+
+```sh
+sudo pacman -S --needed python glslang nasm xz clang lld llvm wine python-numpy python-pillow
+CRINKLER=/cesta/k/crinkler30b/Win64/Crinkler.exe WINEPREFIX=$HOME/.wine-brana ./build.sh
+```
+
+Wine 11 tam spúšťa 32-bitové programy v režime WoW64, v ktorom 32-bitový
+`Win32/Crinkler.exe` padá; 64-bitový `Win64/Crinkler.exe` z toho istého
+balíka funguje (výsledný súbor je aj tak 32-bitový).
+
 `build.sh` zminifikuje shadery, zostaví všetky tri verzie do `dist/` a overí
 limit 4096 bajtov. Pri vývoji pomáhali
 [`tools/preview.c`](tools/preview.c) (vykreslenie snímok a WAV súboru
@@ -179,14 +190,26 @@ a jeho nastavenie), prehrá 2 × 8 sekúnd hudby a prvých 60 s uloží do
 
 ## Testovanie
 
+- Linux verzia: vyskúšaná na skutočnom PC s grafikou NVIDIA GeForce RTX 3060
+  (ovládač 615.71.09, CachyOS, GNOME na Waylande cez XWayland, PipeWire 1.6,
+  USB headset): hudba aj obraz fungujú. Zvuk, ktorý intro posiela cez ALSA
+  (zachytený do súboru), je bitovo zhodný s hudbou vypočítanou na tej istej
+  GPU. Od softvérového renderera sa hudba z NVIDIA líši najviac o 0,0023
+  (−53 dBFS, rozdiely zaokrúhľovania, nepočuť ich). Predtým bola spustená na
+  Ubuntu 24.04 (Xvfb, Mesa llvmpipe, PulseAudio aj PipeWire 1.0) vrátane
+  ukončenia ESC; kompatibilita dynamickej sekcie je overená aj so starým
+  dynamickým linkerom glibc 2.31.
+- Oprava pre NVIDIA: predchádzajúce verzie na grafike NVIDIA namiesto hudby
+  potichu pískali. Kompilátor shaderov NVIDIA odmietol shader hudby (volanie
+  `step(22., bb)` s celočíselným `bb` označil za nejednoznačné; Mesa aj Apple
+  ho prijmú), takže namiesto hudby sa 2:26 prehrával konštantný signál 1,0.
+  Rovnaký shader majú všetky tri verzie, preto je opravená aj Windows verzia
+  (na grafike NVIDIA by pravdepodobne pískala tiež) a macOS verzia.
 - Windows verzia: spustená pod Wine 9.0 (Xvfb, Mesa llvmpipe, PulseAudio):
-  obraz, zvuk, časovanie aj ukončenie ESC fungujú. Na skutočnom Windows som ju
-  spustiť nemohol.
-- Linux verzia: spustená na Ubuntu 24.04 (Xvfb, Mesa llvmpipe, PulseAudio
-  aj PipeWire 1.0), vrátane ukončenia ESC; zvuk, ktorý program posiela cez
-  ALSA, je bajt po bajte zhodný s referenčnou hudbou; kompatibilita dynamickej
-  sekcie overená aj so starým dynamickým linkerom glibc 2.31.
-- Na skutočnej grafickej karte som intro spustiť nemohol (k dispozícii bol
-  len softvérový renderer). Zaokrúhľovanie GPU som pri hľadaní blikania
-  napodobnil v shaderi.
-- macOS verzia: pozri upozornenie vyššie.
+  obraz, zvuk, časovanie aj ukončenie ESC fungujú. Pod Wine 11.18
+  s ovládačom NVIDIA (Linux) vypočíta správnu hudbu a prehrá ju (zvuk
+  zachytený cez ALSA je bitovo zhodný s hudbou z tej istej GPU). Na
+  skutočnom Windows som ju spustiť nemohol.
+- macOS verzia: pozri upozornenie vyššie. Oprava sa jej týka len tým, že
+  shader je o pár bajtov kratší; kompilátor shaderov v macOS pôvodný kód
+  prijímal.

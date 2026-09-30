@@ -1,14 +1,13 @@
-# BRÁNA 4K intro: handoff for local Claude Code
+# BRÁNA 4K intro: handoff for Claude Code
 
-Written on 2026-09-30 at the end of a cloud Claude Code session. That
-session had only a software renderer (Mesa llvmpipe) and virtual sound
-devices, so it could not reproduce the two problems that remain: they only
-show up on the owner's real hardware. This file is everything the next agent
-needs to continue **on the physical machines**.
+Started on 2026-09-30 at the end of a cloud Claude Code session, which had
+only a software renderer (Mesa llvmpipe) and virtual sound devices. Updated
+the same day by a local Claude Code session on the owner's Linux PC, which
+found and fixed open issue 1 (section 2). The one remaining issue only shows
+up on the owner's MacBook (section 3).
 
-Repository: `github.com/m1omg/4kclaudedemo`, branch `main` (merge commit
-`94ce63a`, PR #4). Work branch used so far: `ccr-e0f02308-ge7fge`. It has been
-merged; a new branch is fine.
+Repository: `github.com/m1omg/4kclaudedemo`, branch `main`. The NVIDIA fix is
+PR #6. Start new work on a new branch from the updated `main`.
 
 ---
 
@@ -22,45 +21,39 @@ Intel macOS. Everything is computed at runtime:
 
 | Platform | File | Size | Status |
 |---|---|---|---|
-| Windows | `dist/brana-windows.exe` | 3183 B | Works under Wine. **Never run on real Windows.** |
-| Linux | `dist/brana-linux` | 4013 B | Works on Mesa llvmpipe with bit-exact audio. **On the owner's NVIDIA PC: a steady high-pitched tone instead of music** (open issue 1). |
-| macOS (Intel) | `dist/brana-macos` | 4081 B | **Confirmed on the owner's MacBook:** music plays and visuals render correctly (build before PR #4). **Only a few fps on its Intel HD Graphics** (open issue 2). PR #4 optimizations are untested there. |
+| Windows | `dist/brana-windows.exe` | 3232 B | Works under Wine: 9.0 with Mesa llvmpipe; 11.18 with the NVIDIA driver renders and plays the right music. **Never run on real Windows.** |
+| Linux | `dist/brana-linux` | 4010 B | **Works on the owner's NVIDIA RTX 3060 PC:** the owner heard the music (PR #6). Also works on Mesa llvmpipe. |
+| macOS (Intel) | `dist/brana-macos` | 4076 B | **Confirmed on the owner's MacBook:** music plays and visuals render correctly (build before PR #4). **Only a few fps on its Intel HD Graphics** (open issue). PR #4 optimizations are untested there. |
 
-Open issues, in priority order:
-1. **Linux + NVIDIA RTX 3060: high-pitched tone instead of music.** The tone
-   comes out of the headphones; it is not coil whine (the owner checked).
-2. **macOS on Intel HD Graphics: a few fps.** PR #4 made the worst scenes
-   about 2.6× cheaper, but that is not yet tested on the Mac.
+Open issue: **macOS on Intel HD Graphics runs at a few fps** (section 3).
+PR #4 made the worst scenes about 2.6× cheaper, but that is not yet tested on
+the Mac.
 
-**The very first thing to do on the Linux PC** takes 30 seconds and splits
-issue 1 in half. Run the intro with software rendering instead of NVIDIA:
-
-```sh
-__GLX_VENDOR_LIBRARY_NAME=mesa LIBGL_ALWAYS_SOFTWARE=1 ./dist/brana-linux
-```
-
-The visuals will be slow; that is fine. What matters is the music:
-- **Music plays correctly** → the NVIDIA GPU computes the music shader
-  differently. Go to section 2.4, branch A.
-- **Still the tone** → the problem is in the sound path. Go to branch B.
+Fixed in PR #6 (section 2): NVIDIA's compiler rejected the music shader, so
+on NVIDIA GPUs the intro played a constant 1.0 signal instead of the music,
+heard as a quiet high-pitched tone. **Compile every shader change on the
+NVIDIA PC too** (`tools/check_shaders.sh` there): NVIDIA rejects some GLSL
+that Mesa, Apple and `glslangValidator` accept.
 
 ---
 
 ## 1. The owner's machines
 
-**Linux PC.** `fastfetch` output from the owner:
+**Linux PC.** From the owner's `fastfetch`, checked by the local session on
+2026-09-30:
 
 | Item | Value |
 |---|---|
 | OS | CachyOS x86_64 (Arch based) |
 | Kernel | 7.2.8-1-cachyos |
-| Desktop | GNOME 50.5 on Wayland (Mutter), so the intro runs under XWayland |
-| GPU | NVIDIA GeForce RTX 3060 LHR (driver unknown; presumably the NVIDIA proprietary/open kernel module) |
+| Desktop | GNOME 50.5 on Wayland (Mutter), so the intro runs under XWayland (`DISPLAY=:0`) |
+| GPU | NVIDIA GeForce RTX 3060 LHR, driver 615.71.09 (open kernel module), OpenGL 4.6. Mesa 26.2.3 is installed too: llvmpipe with `__GLX_VENDOR_LIBRARY_NAME=mesa LIBGL_ALWAYS_SOFTWARE=1`. |
 | CPU | Intel Core i5-11400F: 6 cores / 12 threads, **no integrated GPU** |
 | RAM | 62 GiB |
 | Display | MSI 27" 2560×1440 at 180 Hz (DisplayPort) |
-| Audio | Headphones (type unknown: analog, USB, Bluetooth or the monitor's jack?). Sound server presumably PipeWire (CachyOS default), **not verified**. |
-| Other | Shell fish, locale sk_SK.UTF-8 |
+| Audio | Logitech G535 Wireless Gaming Headset (USB), the default sink. PipeWire 1.6.9 with `pipewire-alsa` and `pipewire-pulse`: ALSA `default` is the PipeWire plugin. The graph runs at 48 kHz only (`clock.allowed-rates [ 48000 ]`), so the intro's 44.1 kHz stream is resampled. |
+| Tools | gcc, clang 22.1.8, lld (`ld64.lld`), `llvm-dlltool`, glslang, xz, gdb, python with numpy and Pillow, Wine 11.18 (WoW64). **Not installed: `nasm`** (see 6.1). No passwordless sudo. |
+| Other | Login shell fish, locale sk_SK.UTF-8. The agent's Bash tool runs zsh (see 6.4). |
 
 **MacBook:** Intel HD Graphics (exact model and macOS version unknown). It ran
 the pre-PR #4 build (`.xz` dropper) with correct music and visuals, but at
@@ -68,207 +61,96 @@ the pre-PR #4 build (`.xz` dropper) with correct music and visuals, but at
 
 ---
 
-## 2. Open issue 1: Linux on NVIDIA plays a steady high-pitched tone
+## 2. Fixed: Linux on NVIDIA played a steady high-pitched tone
 
 ### 2.1 History
 
 1. **First build (PR #1):** the owner reported, in Slovak, "the sound on Linux
    is just whistling, and the towers blink at the beginning".
-2. **PR #2** fixed:
-   - the tower flicker (see section 7);
-   - oscillator phases: they are now reduced to one period before `sin`/`cos`
-     (the pad and lead used arguments up to about 18 000 rad, where some GPUs
-     lose precision).
+2. **PR #2** fixed the tower flicker and reduced oscillator phases to one
+   period before `sin`/`cos`. That was not the cause (the change is harmless
+   and stays). "Still same high pitch tone on cachyos"; the owner checked
+   that it comes from the headphones, not from coil whine.
+3. **PR #3** added `tools/brana-diag`; **PR #4** (performance): "its the same
+   on linux still".
+4. **PR #6** (local session on the owner's PC): the cause showed up as soon
+   as `tools/preview.c` rendered the music on the NVIDIA driver. Fixed; the
+   owner confirmed that the music plays.
 
-   Result: "still same high pitch tone on cachyos". The owner then clarified
-   that the whine is in the headphones, not GPU coil whine.
-3. **PR #3** added the diagnostic tool `tools/brana-diag`. The owner had not
-   yet posted its output when this handoff was written.
-4. **PR #4** (performance): "its the same on linux still".
+### 2.2 Cause
 
-So the phase fix did not help, and the cause is something else.
+NVIDIA's GLSL compiler (driver 615.71.09) rejected `src/music.frag`:
 
-### 2.2 What is verified (in the cloud, Ubuntu 24.04, Mesa llvmpipe)
+    0(48) : error C1101: ambiguous overloaded function reference "step(float, int)"
 
-- **Rendering:** the GPU-rendered song equals the reference. The minified and
-  source shaders give bit-identical audio (`tools/check_shaders.sh`).
-- **ALSA output:** the Linux binary's output was checked two ways:
-  - ALSA `file` plugin: bit-identical to the reference;
-  - recorded from a PipeWire 1.0.5 null sink through `pipewire-alsa`: every
-    played sample bit-identical.
+The line had `step(22., bb)` with `int bb`; it was there since the first
+commit. GLSL allows the implicit int → float conversion, and Mesa, Apple and
+`glslangValidator` accept it. But `step` has two overload families,
+`step(genType, genType)` and `step(float, genType)`, which coincide for
+scalars, and NVIDIA reports the converted call as ambiguous. The same can
+happen with the other builtins that have two families: `smoothstep`,
+`clamp`, `min`, `max`, `mod`, `mix`.
 
-  PulseAudio 16 was also fine.
-- **ALSA setup** that `snd_pcm_set_params` produced there:
-  "ALSA <-> PipeWire PCM I/O Plugin", FLOAT_LE, 2 ch, 44100 Hz, buffer 4410,
-  period 1102.
-- **Other builds:** the same shader on the macOS code path plays correct music
-  on the owner's real Mac (Intel GPU, Apple OpenGL). Windows under Wine plays
-  the music.
+With no error checks (for size), the intro then did this:
+- `glCreateShaderProgramv` returned a program whose link had failed;
+- `glUseProgram` failed with `GL_INVALID_OPERATION`, so program 0 (the
+  fixed-function pipeline) stayed current;
+- `glRects` drew white into the RGBA32F texture: **every sample of the song
+  was 1.0**;
+- the intro played that full-scale constant signal for 2:26. The G535
+  headset turned it into a quiet high-pitched whine, not silence.
 
-### 2.3 What is NOT known
+The visual shader compiled, so the picture was fine. The Windows build has
+the same shader, so Windows on NVIDIA most likely had the same bug (not
+tested on real Windows). Apple's compiler accepts the code; the Mac played
+music.
 
-- Whether the RTX 3060 driver computes the music shader correctly.
-- What ALSA `default` is on the CachyOS machine (`pipewire-alsa`? `pulse`? a
-  raw `hw` device?).
-- What the tone is: its frequency, whether it changes over time, and whether
-  it starts immediately.
+### 2.3 Fix
 
-### 2.4 Debugging plan
+In `song()`, the snare roll's volume ramp is clamped instead of gated:
 
-Every step is a simple command. Start with step 0, then follow branch A or B.
+    before: (bb * 16 + sb - 351) / 64. * step(22., bb)
+    after:  max(bb * 16 + sb - 351, 0) / 64.
 
-**0. Software-rendering test** (see the TL;DR). It decides between A (GPU) and
-B (sound path).
+The ramp is ≤ 0 whenever bb < 22, so the value is the same. On llvmpipe the
+song is bit-identical to before. It is also smaller: Linux −3 B, macOS −5 B,
+Windows −4 B (same toolchain).
 
-**0b. The diagnostic tool.** Run it twice: once normally (NVIDIA) and once
-with `__GLX_VENDOR_LIBRARY_NAME=mesa LIBGL_ALWAYS_SOFTWARE=1`.
+### 2.4 Verification (on the owner's PC)
 
-```sh
-./tools/brana-diag     # or rebuild: python3 tools/minify.py src/music.frag src/visual.frag -o src/shaders.h
-                       #             gcc -O2 -o tools/brana-diag tools/diag.c -ldl -lm
-```
+- The owner ran the old build with software rendering
+  (`__GLX_VENDOR_LIBRARY_NAME=mesa LIBGL_ALWAYS_SOFTWARE=1`) and heard the
+  music. So the sound path (ALSA, PipeWire, headset) was fine and the GPU was
+  the difference.
+- `preview music` on NVIDIA now compiles. The NVIDIA render differs from the
+  llvmpipe reference by at most 0.0023 (−53 dBFS); overall SNR 66 dB. That is
+  float rounding in `sin`/`exp` and cannot be heard.
+- The packed `dist/brana-linux` on NVIDIA, with ALSA `default` redirected to a
+  file (6.3): the 145.9 s written before the timeout are bit-exact with the
+  NVIDIA `preview` render.
+- The same binary played through PipeWire to the headset: the owner heard the
+  music.
+- `dist/brana-windows.exe` under Wine 11.18 with the NVIDIA driver and Wine's
+  ALSA driver, into the same file redirect: 43.68 s captured, bit-exact with
+  the NVIDIA render.
+- The rebuilt `tools/brana-diag` reports `MUSIC RENDER: OK` on NVIDIA.
+- `tools/check_shaders.sh` passes on NVIDIA and on llvmpipe. It now prints the
+  driver's log when a render fails: on NVIDIA with the old shader it shows
+  the error above.
 
-It replays the Linux intro's startup step by step (same calls, same order,
-same parameters) and prints:
-- `GL_RENDERER` and the program link log;
-- the texture's real internal format and bits;
-- the framebuffer status and GL errors;
-- a comparison of the rendered music with reference values (6 spots, plus RMS
-  and zero crossings per 16 s), with the verdict `MUSIC RENDER: OK` or
-  `DIFFERENT`;
-- `/proc/asound/cards`, the ALSA PCM that `default` resolves to, and its
-  setup.
+### 2.5 Lessons
 
-Then it plays two 8-second clips:
-- **A:** one big `snd_pcm_writei`, like the intro;
-- **B:** small blocks.
-
-It also saves the first 60 s of the rendered music to `brana-diag.wav`
-(16-bit). **Listen to both WAVs** (NVIDIA and llvmpipe) with any player.
-
-**0c. Record what the intro actually plays** and compare it with the
-reference:
-
-```sh
-# make PipeWire run at 44.1 kHz so the recording can be bit-exact
-pw-metadata -n settings 0 clock.force-rate 44100
-parec -d @DEFAULT_MONITOR@ --format=float32le --rate=44100 --channels=2 --file-format=wav rec.wav &
-./dist/brana-linux        # let it play ~30 s, press any key
-kill %1
-pw-metadata -n settings 0 clock.force-rate 0
-
-# reference = the song rendered by llvmpipe
-gcc -O2 -o preview tools/preview.c -lGL -lX11 -lm
-__GLX_VENDOR_LIBRARY_NAME=mesa LIBGL_ALWAYS_SOFTWARE=1 ./preview music src/music.frag ref.wav 146
-python3 tools/audiocmp.py ref.wav rec.wav
-```
-
-`audiocmp.py` reports one of three things:
-- a bit-exact match, with or without gaps (underruns);
-- "starts like the reference but differs later";
-- no match. In that case it compares spectra and prints the **strongest
-  frequencies**, which is the pitch of the tone.
-
-#### Branch A: the NVIDIA render differs
-
-1. Render the song on NVIDIA with `./preview music src/music.frag nv.wav 146`
-   (no environment variables). Compare it with `python3 tools/audiocmp.py
-   ref.wav nv.wav`, and plot it with `python3 tools/analyze_audio.py nv.wav`,
-   which prints per-bar levels.
-2. **Bisect the shader.** Edit a copy of `src/music.frag` and run each variant
-   through `preview music` on NVIDIA. In `song()`, the final line is:
-
-   ```glsl
-   return tanh((m + s * (1. - kick * .7)) * smoothstep(73., 68., bars) * .8);
-   ```
-
-   - `m` is the drums, `s` the tonal instruments. Return only one of them.
-   - Then return single instruments: comment out the `s += ...` lines one at
-     a time (bass, pad loop, arp loop, lead loop).
-   - Remove `tanh`.
-
-   Find the smallest expression that differs between NVIDIA and llvmpipe.
-   (`tools/stems.py` does something similar but is **stale**: its regexes
-   predate the current mix code. Update it or bisect by hand.)
-3. **Suspects** in `music.frag`, most likely first:
-   - **`smoothstep` with reversed edges.** The GLSL spec says the result is
-     undefined if `edge0 >= edge1`, and it is used 6×:
-     - `smoothstep(.5, .45, tb)` in the kick envelope;
-     - `smoothstep(73., 68., bars)` on the **whole mix**;
-     - `smoothstep(.125, .11, ts)` twice;
-     - `smoothstep(4.8, 4., x)`;
-     - `smoothstep(d * .25, d * .25 - .04, y)`.
-
-     It works on Mesa and Apple, but it is the one piece of undefined
-     behaviour in the shader. Test it by rewriting each as
-     `1. - smoothstep(e1, e0, x)`.
-   - Implicit int→float conversions:
-     - `float(sec & MASK) / sec` (int divisor);
-     - `sign(sb & 3)` (int) multiplied into a float;
-     - `pow(.45, k)` with an int `k`;
-     - `freq(int + ..., t)`;
-     - `step(22., bb)` with an int `bb`.
-   - Integer ops: `i * 2 / 11025`, `>>`, `&`, `%`, `1 << (bar >> 2)`.
-   - The uint hash `noise()`: `uint(i) * 2654435769u`, xor-shifts,
-     `float(uint) / 2.1e9`.
-   - The `const int D[48]` array with dynamic indices; loops with `break` and
-     `continue`.
-   - `tanh`: NVIDIA may use a fast approximation, but that would only add
-     distortion, not a tone.
-   - Precision: all times come from the integer sample index and all phases
-     are reduced, so precision alone is unlikely to produce a *tone*.
-4. **Check the readback, not just the shader.** The diagnostic prints the
-   texture format and framebuffer status. Also try `glGetTexImage` instead of
-   `glReadPixels`, and try rendering after `XMapWindow` instead of before it:
-   the intro renders the music into an FBO while its window is still
-   unmapped, which is legal but unusual.
-5. Once found, fix it in `src/music.frag`. Keep the output of llvmpipe as
-   identical as possible: run `tools/check_shaders.sh` and compare
-   old and new renders with `audiocmp.py`.
-
-#### Branch B: the render is fine but the tone comes out anyway
-
-1. Look at the diagnostic's ALSA section: is `default` "ALSA <-> PipeWire
-   PCM I/O Plugin"? Also check:
-   - `pacman -Qs pipewire-alsa` (is it installed?);
-   - `ls /usr/share/alsa/alsa.conf.d/`;
-   - `aplay -L | head -30`;
-   - `pactl info` (default sink: which device is the headphones? Bluetooth
-     in HSP/HFP mode, USB, analog, or the DisplayPort audio of the monitor?).
-2. Did clips A and B of the diagnostic sound like music?
-   - **A tone, B music** → the single huge `snd_pcm_writei` is the problem.
-     The intro would have to write in chunks (a loop in `writer:` in
-     `src/linux/main.asm`; Linux has 83 bytes to spare).
-   - **Both a tone** → FLOAT_LE via this ALSA path is broken. Test with
-     `aplay -f FLOAT_LE -r 44100 -c 2 some_float.raw`.
-3. The intro opens ALSA device `default`. The source has a test hook for
-   building against another device: in `src/linux/main.asm`, `%ifdef DEVICE`.
-
-   ```sh
-   nasm -f bin -DDEVICE='"pipewire"' -I src/ src/linux/main.asm -o /tmp/brana.elf && chmod +x /tmp/brana.elf && /tmp/brana.elf
-   ```
-
-   The unpacked ELF runs directly. `tools/build_linux.sh` only adds the
-   xzcat stub.
-4. **Inspect the song buffer inside the real binary.**
-   `nasm -f bin -DDEBUG -l /tmp/brana.lst ...` inserts an `int3` right after
-   `glReadPixels`. Run the ELF under gdb, and at the trap:
-
-   ```
-   dump binary memory song.bin ADDR ADDR+51511296
-   ```
-
-   `ADDR` is the address of the `song` label from the listing (in `.bss`,
-   after the code); 51511296 = 1024 × 3144 × 16. Compare the float data with
-   the reference: the preview harness WAV has a 44-byte header, then the same
-   float stereo samples.
-
-When fixed: rebuild everything, check sizes, test, and commit/push/PR/merge
-(section 8).
+- `glslangValidator` and Mesa are not a portability check. Compile every
+  shader change on NVIDIA as well: `tools/check_shaders.sh` on this PC.
+- Do not pass an `int` to a builtin that takes `float`; write `float(x)` or
+  restructure. Arithmetic (`+ - * /`) mixes int and float in many places in
+  the shaders, and NVIDIA, Mesa and Apple all accept that.
+- `tools/brana-diag` prints the program log and a verdict, so it shows such a
+  failure at once.
 
 ---
 
-## 3. Open issue 2: macOS on Intel HD Graphics runs at a few fps
+## 3. Open issue: macOS on Intel HD Graphics runs at a few fps
 
 ### 3.1 What PR #4 changed (`src/visual.frag`)
 
@@ -354,7 +236,7 @@ separate low-spec version **only as a last resort**.
    - `glBlitFramebuffer` with `GL_LINEAR` to the window.
    - Pass the scaled size in `u.yz`.
    - Full resolution on fast GPUs.
-   - Needs about 50–80 bytes per platform. macOS has 15 bytes left, so it
+   - Needs about 50–80 bytes per platform. macOS has 20 bytes left, so it
      needs savings first.
 3. **Last resort:** a separate low-spec build.
 
@@ -368,7 +250,8 @@ separate low-spec version **only as a last resort**.
 
 ## 4. Other known issues and loose ends
 
-- **Windows was never run on real Windows**, only under Wine 9.0.
+- **Windows was never run on real Windows**, only under Wine (9.0 with
+  llvmpipe; 11.18 with the NVIDIA driver, PR #6).
   - If `waveOutOpen` fails (no audio device), `waveOutGetPosition` never
     advances and the intro would freeze on the first frame. A timer fallback
     would fix it.
@@ -377,11 +260,14 @@ separate low-spec version **only as a last resort**.
     llvmpipe compiles the big shader.
 - **Stars** are sub-pixel and twinkle a bit. Glow halos accumulate per march
   step, so they shimmer slightly when step counts change.
-- **`tools/stems.py` is stale** (see 2.4 A).
+- **`tools/stems.py` is stale**: its regexes predate the current mix code.
 - **The macOS `.lzma` dropper** is untested on a real Mac (see 3.2).
 - **No error handling anywhere**, for size. A missing library crashes the
-  Linux binary with a segfault. A failed shader compile gives silence (the
-  fixed-function pipeline renders white, i.e. a constant 1.0 signal).
+  Linux binary with a segfault. A failed music shader compile gives a
+  constant 1.0 signal (the fixed-function pipeline renders white), heard as a
+  whine on the owner's headset (section 2).
+- **Shader compilers seen so far:** Mesa (llvmpipe), NVIDIA 615 on Linux,
+  Apple on the Intel Mac. AMD and Intel drivers on Windows are untested.
 - **Linux requirements:** glibc, X11 or XWayland, OpenGL 4.1+ with GLSL 3.30
   in a compatibility context, `libasound.so.2`, `/usr/bin/xzcat`, kernel
   3.19+. It does not run on NixOS or musl distributions (no
@@ -420,10 +306,10 @@ Also requested:
 | `src/win/main.c`, `src/win/lib/*.def/.lib` | Windows layer and import libraries (`llvm-dlltool -m i386 -k -d x.def -l x.lib`). |
 | `build.sh` | Builds everything into `dist/` and checks 4096 B. Runs `tools/check_shaders.sh` if `$S/preview` exists. |
 | `tools/minify.py` | GLSL minifier. Writes `src/shaders.h` (C), `src/shaders.inc` (nasm) and `src/shaders.h.*.min` (all git-ignored). |
-| `tools/check_shaders.sh` | Minified shaders must give **bit-identical** audio and frames (compat), and compile in a 3.3 core context (macOS path). |
+| `tools/check_shaders.sh` | Minified shaders must give **bit-identical** audio and frames (compat), and compile in a 3.3 core context (macOS path). Uses the default GL driver, so on the NVIDIA PC it is also the NVIDIA compile check; prints the driver's log on failure. |
 | `tools/build_win.sh`, `build_linux.sh`, `build_mac.sh`, `xzbest.sh` | Per-platform builds. `xzbest.sh` grid-searches LZMA encoder parameters. |
 | `tools/preview.c` | Dev harness: renders the music to a WAV and frames to PPM or a raw stream, through the same GL paths (compat or `-core`). |
-| `tools/diag.c`, `tools/brana-diag` | Linux diagnostic (see 2.4). |
+| `tools/diag.c`, `tools/brana-diag` | Linux diagnostic: replays the intro's startup and prints the GL driver, the music shader's link log, whether the rendered music matches the reference, and the ALSA setup; then plays 2 × 8 s and saves `brana-diag.wav`. Embeds the minified shader: rebuild it when `music.frag` changes. |
 | `tools/bench.py`, `tools/flicker.py`, `tools/audiocmp.py` | GPU cost per scene, temporal flicker metric, recording-vs-reference audio comparison. |
 | `tools/analyze_audio.py`, `tools/contact.py`, `tools/stems.py` | Per-bar audio levels and spectrogram, contact sheets of frames, per-instrument stems (stale). |
 | `tools/macsim/` | Runs the macOS machine code on Linux: the same asm assembled as ELF, with fake GLUT, OpenGL and AudioToolbox libraries installed at the macOS framework paths (needs root for `/System`). |
@@ -554,10 +440,13 @@ The bar is `B = time / 2`.
 
 | Platform | Size | Left |
 |---|---|---|
-| Windows | 3183 B | 913 |
-| Linux | 4013 B | 83 |
-| macOS | 4081 B | **15** |
+| Windows | 3232 B | 864 |
+| Linux | 4010 B | 86 |
+| macOS | 4076 B | **20** |
 
+- The Windows size depends on the compiler: the pre-PR #6 sources give
+  3183 B with Ubuntu's clang 18 (the cloud builds) and 3236 B with clang
+  22.1.8 (the owner's PC). PR #6 was built with clang 22.
 - Shader bytes cost roughly the same on every platform (they are compressed
   inside each binary).
 - `tools/build_*.sh` print the compressed parts.
@@ -578,12 +467,24 @@ The bar is `B = time / 2`.
 
 ```sh
 sudo pacman -S --needed base-devel nasm glslang xz clang lld llvm python-numpy python-pillow libx11 libglvnd mesa
-sudo pacman -S --needed wine          # only for the Windows build (Crinkler); needs 32-bit support
+sudo pacman -S --needed wine          # only for the Windows build (Crinkler)
 ```
 
-- Crinkler 3.0: <https://github.com/runestubbe/Crinkler> (releases,
-  `crinkler30b`). Set `CRINKLER=/path/to/Crinkler.exe` and `WINEPREFIX=...`
-  for `tools/build_win.sh`.
+- On the owner's PC everything except `nasm` was already installed
+  (2026-09-30). Without sudo, the local session took `nasm` 3.02 from the
+  CachyOS mirror
+  (`https://cdn77.cachyos.org/repo/x86_64_v4/cachyos-extra-v4/nasm-3.02-1.1-x86_64_v4.pkg.tar.zst`,
+  SHA-256 checked against `/var/lib/pacman/sync/cachyos-extra-v4.db`) and
+  ran `usr/bin/nasm` from it. It reproduces the committed Linux and macOS
+  binaries byte for byte.
+- Crinkler 3.0b: <https://github.com/runestubbe/Crinkler/releases>
+  (`crinkler30b.zip`). Wine 11 on Arch runs 32-bit programs in WoW64 mode,
+  where `Win32/Crinkler.exe` crashes in "Estimating models for Code". Use
+  `Win64/Crinkler.exe`; it writes the same kind of 32-bit exe. Set
+  `CRINKLER=/path/to/Crinkler.exe` and `WINEPREFIX=...` for
+  `tools/build_win.sh`. Create a separate prefix without the Mono and Gecko
+  install dialogs:
+  `WINEPREFIX=$S/wine WINEDLLOVERRIDES="mscoree,mshtml=" wineboot -i`.
 - `tools/build_mac.sh` finds `ld64.lld-18` (Ubuntu) or `ld64.lld` (Arch), or
   takes `LD64=...`.
 - `tools/check_shaders.sh` uses `python3`, or takes `PYTHON=...`.
@@ -595,21 +496,55 @@ sudo pacman -S --needed wine          # only for the Windows build (Crinkler); n
 ```sh
 export S=$HOME/brana-scratch && mkdir -p $S                   # scratch dir used by the tools
 gcc -O2 -o $S/preview tools/preview.c -lGL -lX11 -lm          # dev harness (needs a display)
-MODE=VERYSLOW ORDERTRIES=5000 ./build.sh                      # everything, checks 4096 B (runs check_shaders if $S/preview exists)
+CRINKLER=$S/crinkler30b/Win64/Crinkler.exe WINEPREFIX=$S/wine MODE=VERYSLOW ORDERTRIES=5000 ./build.sh   # everything, checks 4096 B (runs check_shaders if $S/preview exists)
 python3 tools/minify.py src/music.frag src/visual.frag -o src/shaders.h && tools/build_linux.sh && tools/build_mac.sh   # without Windows
-tools/check_shaders.sh                                        # minified == source, bit-exact
+tools/check_shaders.sh                                        # minified == source, bit-exact; on the NVIDIA PC also the NVIDIA compile check
 $S/preview music src/music.frag out.wav 146                   # render the song
 $S/preview frame src/visual.frag 26 1280 720 f.ppm            # one frame at t = 26 s
 python3 tools/bench.py src/visual.frag                        # GPU cost per scene
 python3 tools/flicker.py src/visual.frag                      # flicker metric
 python3 tools/audiocmp.py ref.wav recording.wav               # recording vs reference
+gcc -O2 -o tools/brana-diag tools/diag.c -ldl -lm             # after minify.py; rebuild it whenever music.frag changes
 ```
 
+- The Crinkler step (`VERYSLOW`, 5000 order tries) takes about 1 minute on
+  the i5-11400F.
 - The reference for all audio comparisons is **Mesa llvmpipe**: prefix the
   commands with `__GLX_VENDOR_LIBRARY_NAME=mesa LIBGL_ALWAYS_SOFTWARE=1`.
+  NVIDIA renders differ from it by float rounding (at most 0.0023).
 - The cloud tests used Xvfb, a PipeWire null sink, `pw-record` from its
-  monitor, `xdotool key Escape` and `ffmpeg -f x11grab` screenshots. On the
-  real machine, `parec -d @DEFAULT_MONITOR@` records what is played.
+  monitor, `xdotool key Escape` and `ffmpeg -f x11grab` screenshots.
+
+### 6.3 Testing the sound without playing it
+
+The owner's headset is the default sink. To capture exactly what a binary
+writes to ALSA, without playing it, point `ALSA_CONFIG_PATH` at a standalone
+config:
+
+```sh
+printf 'pcm.!default {\n\ttype file\n\tslave.pcm { type null }\n\tfile "%s"\n\tformat "raw"\n}\n' $S/out.raw > $S/asound_file.conf
+ALSA_CONFIG_PATH=$S/asound_file.conf timeout 8 ./dist/brana-linux
+```
+
+- Do **not** include `/usr/share/alsa/alsa.conf` in that config: its hooks
+  load `/etc/alsa/conf.d/99-pipewire-default.conf` afterwards, which makes
+  `default` PipeWire again, and the sound goes to the headset.
+- `$S/out.raw` is float32 stereo, the same layout as a `preview music` WAV
+  after its 44-byte header. The null device takes the data faster than real
+  time.
+- Windows build under Wine: switch the prefix to Wine's ALSA driver once
+  (`wine reg add 'HKCU\Software\Wine\Drivers' /v Audio /d alsa /f`), then run
+  `wine dist/brana-windows.exe` with the same `ALSA_CONFIG_PATH`.
+- The intro still opens its full-screen window on the owner's screen (any
+  key quits it). Tell the owner before running it.
+
+### 6.4 Gotchas on this PC
+
+- The agent's Bash tool runs zsh. `"$c:src/music.frag"` applies the zsh
+  modifier `:s`; write `"${c}:src/music.frag"`. A word starting with `=` is
+  expanded as a command path (`echo ====` fails).
+- Every `wine` run prints harmless `MESA-EGL: warning: ... failed to create
+  dri2 screen` lines: Mesa's EGL probing the NVIDIA GPU.
 
 ---
 
@@ -621,7 +556,8 @@ python3 tools/audiocmp.py ref.wav recording.wav               # recording vs ref
 | #2 | Oscillator phases reduced to one period. Monolith flicker fixed (no coplanar box/floor, finite monolith field). |
 | #3 | `tools/brana-diag` + `tools/diag.c` (Linux diagnostic), README section "Diagnostika (Linux)". |
 | #4 | Faster raymarching (analytic floor step, sky exit, no normal/AO for neon, no floor AO). macOS dropper switched to lzma-alone (−40 B). |
-| (this) | `HANDOFF.md`, `CLAUDE.md`, `tools/bench.py`, `tools/flicker.py`, `tools/audiocmp.py`. Portable `check_shaders.sh` (`PYTHON`) and `build_mac.sh` (`LD64`). |
+| #5 | `HANDOFF.md`, `CLAUDE.md`, `tools/bench.py`, `tools/flicker.py`, `tools/audiocmp.py`. Portable `check_shaders.sh` (`PYTHON`) and `build_mac.sh` (`LD64`). |
+| #6 | NVIDIA fix: `step(22., bb)` → `max(…, 0)` in `music.frag` (section 2). All three binaries and `tools/brana-diag` rebuilt (clang 22.1.8, nasm 3.02, Crinkler 3.0b Win64). `check_shaders.sh` shows the driver's log on failure. `HANDOFF.md` updated. |
 
 ---
 
