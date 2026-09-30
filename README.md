@@ -11,9 +11,9 @@ a na konci sa vráti na horizont, kde sa všetko pomaly ponorí späť do tmy.
 
 | Súbor | Platforma | Veľkosť |
 |---|---|---|
-| [`dist/brana-windows.exe`](dist/brana-windows.exe) | Windows (32-bit exe, beží aj na 64-bit) | 3232 B |
-| [`dist/brana-linux`](dist/brana-linux) | Linux x86-64 (glibc) | 4010 B |
-| [`dist/brana-macos`](dist/brana-macos) | macOS 10.13+ na Intel Macu | 4076 B |
+| [`dist/brana-windows.exe`](dist/brana-windows.exe) | Windows (32-bit exe, beží aj na 64-bit) | 3245 B |
+| [`dist/brana-linux`](dist/brana-linux) | Linux x86-64 (glibc) | 4020 B |
+| [`dist/brana-macos`](dist/brana-macos) | macOS 10.13+ na Intel Macu | 4091 B |
 
 ## Spustenie
 
@@ -127,6 +127,10 @@ bude intro len menej plynulé, nikdy nie pomalšie.
   namiesto výšky nad ňou), lúč nad všetkými objektmi sa hneď ukončí a pre
   neónové povrchy sa nepočíta normála ani ambient occlusion. Scény
   s horizontom sú vďaka tomu asi 2,5× rýchlejšie a obraz sa nezmenil.
+  Monolity stoja v mriežke buniek 7 × 7 a vzdialenosť sa meria len
+  k monolitu vlastnej bunky, preto krok lúča nesmie siahnuť ďalej, než môže
+  stáť monolit v susednej bunke (inak lúč skončí vnútri vyššieho suseda
+  a ambient occlusion z toho urobí tmavé pohyblivé pruhy).
 - **Minifikácia**: [`tools/minify.py`](tools/minify.py) odstráni komentáre
   a medzery a premenuje identifikátory podľa rozsahu platnosti.
   [`tools/check_shaders.sh`](tools/check_shaders.sh) overí, že minifikovaná
@@ -210,6 +214,13 @@ a jeho nastavenie), prehrá 2 × 8 sekúnd hudby a prvých 60 s uloží do
   s ovládačom NVIDIA (Linux) vypočíta správnu hudbu a prehrá ju (zvuk
   zachytený cez ALSA je bitovo zhodný s hudbou z tej istej GPU). Na
   skutočnom Windows som ju spustiť nemohol.
-- macOS verzia: pozri upozornenie vyššie. Oprava sa jej týka len tým, že
-  shader je o pár bajtov kratší; kompilátor shaderov v macOS pôvodný kód
-  prijímal.
+- macOS verzia: pozri upozornenie vyššie. Oprava zvuku pre NVIDIA sa jej
+  týka len tým, že shader je o pár bajtov kratší; kompilátor shaderov
+  v macOS pôvodný kód prijímal.
+- Oprava „vlnenia“ na monolitoch: na hranách a stenách monolitov sa hýbali
+  tmavé oblúky a pruhy, lebo lúč občas skončil vnútri monolitu. Teraz nie je
+  vnútri monolitu ani jeden pixel (predtým až 0,9 % pixelov v snímke) a obraz
+  sa inak nezmenil: v 200 snímkach 1280 × 720 sa od presného výpočtu líši
+  spolu 10 pixelov. Tunely a jadro sú bitovo rovnaké ako predtým. Scény
+  s horizontom sú pre GPU asi o 4–11 % náročnejšie, celé intro o 3 %.
+  Vyskúšané vykreslením na NVIDIA aj llvmpipe; na Macu zatiaľ nie.

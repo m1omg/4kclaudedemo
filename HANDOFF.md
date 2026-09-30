@@ -2,12 +2,13 @@
 
 Started on 2026-09-30 at the end of a cloud Claude Code session, which had
 only a software renderer (Mesa llvmpipe) and virtual sound devices. Updated
-the same day by a local Claude Code session on the owner's Linux PC, which
-found and fixed open issue 1 (section 2). The one remaining issue only shows
-up on the owner's MacBook (section 3).
+by a local Claude Code session on the owner's Linux PC, which fixed the
+NVIDIA tone (section 2, PR #6) and the "warbling" streaks on the monoliths
+(section 5.4, PR #7). The one remaining issue only shows up on the owner's
+MacBook (section 3).
 
-Repository: `github.com/m1omg/4kclaudedemo`, branch `main`. The NVIDIA fix is
-PR #6. Start new work on a new branch from the updated `main`.
+Repository: `github.com/m1omg/4kclaudedemo`, branch `main`. Start new work on
+a new branch from the updated `main`.
 
 ---
 
@@ -21,9 +22,9 @@ Intel macOS. Everything is computed at runtime:
 
 | Platform | File | Size | Status |
 |---|---|---|---|
-| Windows | `dist/brana-windows.exe` | 3232 B | Works under Wine: 9.0 with Mesa llvmpipe; 11.18 with the NVIDIA driver renders and plays the right music. **Never run on real Windows.** |
-| Linux | `dist/brana-linux` | 4010 B | **Works on the owner's NVIDIA RTX 3060 PC:** the owner heard the music (PR #6). Also works on Mesa llvmpipe. |
-| macOS (Intel) | `dist/brana-macos` | 4076 B | **Confirmed on the owner's MacBook:** music plays and visuals render correctly (build before PR #4). **Only a few fps on its Intel HD Graphics** (open issue). PR #4 optimizations are untested there. |
+| Windows | `dist/brana-windows.exe` | 3245 B | Works under Wine: 9.0 with Mesa llvmpipe; 11.18 with the NVIDIA driver renders and plays the right music. **Never run on real Windows.** |
+| Linux | `dist/brana-linux` | 4020 B | **Works on the owner's NVIDIA RTX 3060 PC:** the owner heard the music (PR #6). Also works on Mesa llvmpipe. |
+| macOS (Intel) | `dist/brana-macos` | 4091 B | **Confirmed on the owner's MacBook:** music plays and visuals render correctly (build before PR #4). **Only a few fps on its Intel HD Graphics** (open issue). PR #4 optimizations are untested there. |
 
 Open issue: **macOS on Intel HD Graphics runs at a few fps** (section 3).
 PR #4 made the worst scenes about 2.6× cheaper, but that is not yet tested on
@@ -34,6 +35,9 @@ on NVIDIA GPUs the intro played a constant 1.0 signal instead of the music,
 heard as a quiet high-pitched tone. **Compile every shader change on the
 NVIDIA PC too** (`tools/check_shaders.sh` there): NVIDIA rejects some GLSL
 that Mesa, Apple and `glslangValidator` accept.
+
+Fixed in PR #7 (section 5.4): dark streaks that moved over the monoliths
+(rays stopped inside them). **macOS now has only 5 bytes left** (5.8).
 
 ---
 
@@ -176,6 +180,11 @@ maximum of `map()` calls, which is what a SIMD GPU pays.
 |---|---|---|---|---|---|---|---|---|---|
 | Before PR #4 | 56.6 | 49.5 | 40.9 | 23.0 | 19.7 | 21.9 | 21.9 | 43.5 | 33.5 |
 | After PR #4 | 21.5 | 21.4 | 18.7 | 21.6 | 19.6 | 20.7 | 20.7 | 19.9 | 20.6 |
+| After PR #7 | 23.8 | 23.3 | 19.5 | 21.6 | 19.6 | 20.7 | 20.7 | 20.8 | 21.3 |
+
+PR #7 (the monolith fix, section 5.4) gives a little of it back in the horizon
+scenes (+4 to +11 %, whole intro +3.4 %); it is the cheapest correct variant
+found.
 
 - Frame times on llvmpipe at 480×270: horizon 27 → about 14 ms; tunnels about
   19 ms, unchanged.
@@ -236,7 +245,7 @@ separate low-spec version **only as a last resort**.
    - `glBlitFramebuffer` with `GL_LINEAR` to the window.
    - Pass the scaled size in `u.yz`.
    - Full resolution on fast GPUs.
-   - Needs about 50–80 bytes per platform. macOS has 20 bytes left, so it
+   - Needs about 50–80 bytes per platform. macOS has 5 bytes left, so it
      needs savings first.
 3. **Last resort:** a separate low-spec build.
 
@@ -310,7 +319,7 @@ Also requested:
 | `tools/build_win.sh`, `build_linux.sh`, `build_mac.sh`, `xzbest.sh` | Per-platform builds. `xzbest.sh` grid-searches LZMA encoder parameters. |
 | `tools/preview.c` | Dev harness: renders the music to a WAV and frames to PPM or a raw stream, through the same GL paths (compat or `-core`). |
 | `tools/diag.c`, `tools/brana-diag` | Linux diagnostic: replays the intro's startup and prints the GL driver, the music shader's link log, whether the rendered music matches the reference, and the ALSA setup; then plays 2 × 8 s and saves `brana-diag.wav`. Embeds the minified shader: rebuild it when `music.frag` changes. |
-| `tools/bench.py`, `tools/flicker.py`, `tools/audiocmp.py` | GPU cost per scene, temporal flicker metric, recording-vs-reference audio comparison. |
+| `tools/bench.py`, `tools/flicker.py`, `tools/inside.py`, `tools/audiocmp.py` | GPU cost per scene, temporal flicker metric, pixels whose ray ends inside a solid (must stay 0), recording-vs-reference audio comparison. |
 | `tools/analyze_audio.py`, `tools/contact.py`, `tools/stems.py` | Per-bar audio levels and spectrogram, contact sheets of frames, per-instrument stems (stale). |
 | `tools/macsim/` | Runs the macOS machine code on Linux: the same asm assembled as ELF, with fake GLUT, OpenGL and AudioToolbox libraries installed at the macOS framework paths (needs root for `/System`). |
 | `README.md` | User documentation, **in Slovak**. Keep it in sync: size table, testing notes. |
@@ -362,7 +371,32 @@ The bar is `B = time / 2`.
     which is exact on llvmpipe but not on GPUs; emulating GPU rounding
     confirmed the speckle. The box now reaches `h + .01`;
   - the infinite monolith field made the horizon a band of thousands of
-    sub-pixel caps. Cells outside a disc are sunk 9 units below the floor.
+    sub-pixel caps. Cells outside a disc are sunk below the floor (9 units
+    until PR #7, now 1e3).
+- **Monolith streaks (PR #7).** The owner saw a "warbling" on the columns:
+  dark arcs and bands moving over their faces and tops (0:26–0:48,
+  2:08–2:26). A Claude session on claude.ai found the cause with software
+  rendering; the local session measured and fixed it.
+  - Cause: `map()` measures only the monolith of the ray's own 7 × 7 cell.
+    Horizontally that one is always the nearest, but a ray above a low or
+    flat monolith could step further than a taller one in the next cell and
+    stop inside it. The AO turned the depth error into dark streaks that moved
+    with the camera: up to 0.9 % of the pixels of a frame.
+  - Fix: `d = min(d, 6.3 - max(abs(c.x), abs(c.z)) - min(h, 0.))`. A step never
+    reaches a neighbour's monolith (6.3 from the cell centre). Sunk cells
+    (`-min(h, 0.)` is about 1e3 there) skip the limit: the camera is always
+    inside the field, so rays pass them only on the way out.
+  - `tools/inside.py` counts the pixels whose ray ends inside a solid: 0 now
+    (0.12–0.58 % per frame before, at 1280 × 720).
+  - Exactness: over 200 frames at 1280 × 720 of the horizon scenes, 10 pixels
+    in total differ from the exact version that limits the step in every cell.
+    The tunnels and the core are bit-identical to before (llvmpipe).
+  - Cost: see the table in 3.1. Limiting every cell (the obvious fix) costs
+    +15 % overall and up to +37 % per frame. Also skipping the limit before
+    bar 8 (all monoliths still flat) would remove the extra cost at 0:12 for
+    about 7 more bytes on macOS.
+  - Paid for with two rewrites that render bit-identically: `rot()` without
+    temporaries, and the light position `vec3(0, S < 1. ? 6.5 : 0., 0)`.
 
 ### 5.5 Linux layer (`src/linux/main.asm`, `stub.asm`)
 
@@ -440,13 +474,16 @@ The bar is `B = time / 2`.
 
 | Platform | Size | Left |
 |---|---|---|
-| Windows | 3232 B | 864 |
-| Linux | 4010 B | 86 |
-| macOS | 4076 B | **20** |
+| Windows | 3245 B | 851 |
+| Linux | 4020 B | 76 |
+| macOS | 4091 B | **5** |
 
 - The Windows size depends on the compiler: the pre-PR #6 sources give
   3183 B with Ubuntu's clang 18 (the cloud builds) and 3236 B with clang
-  22.1.8 (the owner's PC). PR #6 was built with clang 22.
+  22.1.8 (the owner's PC). PRs #6 and #7 were built with clang 22.
+- **macOS has 5 bytes left**: any change there needs savings first. Found
+  but not applied: a wider LZMA search in `tools/xzbest.sh` (also `depth=16`,
+  `nice=24`) saves 2 bytes on macOS.
 - Shader bytes cost roughly the same on every platform (they are compressed
   inside each binary).
 - `tools/build_*.sh` print the compressed parts.
@@ -503,6 +540,7 @@ $S/preview music src/music.frag out.wav 146                   # render the song
 $S/preview frame src/visual.frag 26 1280 720 f.ppm            # one frame at t = 26 s
 python3 tools/bench.py src/visual.frag                        # GPU cost per scene
 python3 tools/flicker.py src/visual.frag                      # flicker metric
+python3 tools/inside.py src/visual.frag                       # rays ending inside a solid (must stay 0)
 python3 tools/audiocmp.py ref.wav recording.wav               # recording vs reference
 gcc -O2 -o tools/brana-diag tools/diag.c -ldl -lm             # after minify.py; rebuild it whenever music.frag changes
 ```
@@ -558,6 +596,7 @@ ALSA_CONFIG_PATH=$S/asound_file.conf timeout 8 ./dist/brana-linux
 | #4 | Faster raymarching (analytic floor step, sky exit, no normal/AO for neon, no floor AO). macOS dropper switched to lzma-alone (−40 B). |
 | #5 | `HANDOFF.md`, `CLAUDE.md`, `tools/bench.py`, `tools/flicker.py`, `tools/audiocmp.py`. Portable `check_shaders.sh` (`PYTHON`) and `build_mac.sh` (`LD64`). |
 | #6 | NVIDIA fix: `step(22., bb)` → `max(…, 0)` in `music.frag` (section 2). All three binaries and `tools/brana-diag` rebuilt (clang 22.1.8, nasm 3.02, Crinkler 3.0b Win64). `check_shaders.sh` shows the driver's log on failure. `HANDOFF.md` updated. |
+| #7 | Monolith streaks fixed: the march step never reaches a neighbouring cell's monolith (section 5.4). Paid for with two bit-identical rewrites. `tools/inside.py`. |
 
 ---
 
