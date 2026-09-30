@@ -140,6 +140,6 @@ void main()
 		att *= .6;
 	}
 	col += exp(-abs(B - 24.) * 12.) + exp(-abs(B - 48.) * 12.);
-	k = (1. - .12 * dot(uv, uv)) * smoothstep(0., 1.5, B) * smoothstep(73., 69., B) * min(1., abs(B - 40.) * 2.) * min(1., abs(B - 64.) * 2.);
+	k = exp(-.12 * dot(uv, uv)) * smoothstep(0., 1.5, B) * smoothstep(73., 69., B) * min(1., abs(B - 40.) * 2.) * min(1., abs(B - 64.) * 2.);
 	o = vec4(pow((1. - exp(-col * 1.5)) * k, vec3(.4545)) + hash(uv + B) * .02 * k, 1);
 }

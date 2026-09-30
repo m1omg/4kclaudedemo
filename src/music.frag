@@ -36,7 +36,7 @@ vec2 song(int i)
 		bars = i / 88200.,
 		n = noise(i), hp = n - noise(i - 1), x, y,
 		// arrangement in 4-bar sections: bit k = bars 4k..4k+3
-		kick = float(sec & 0x1F3D0) / sec * exp(-tb * 4.),
+		kick = float(sec & 0x1F3D0) / sec * exp(-tb * 4.) * min(tb * 200., 1.) * smoothstep(.5, .45, tb),
 		drop = float(sec & 0xF3C0) / sec;
 
 	// drums: hats, clap, kick

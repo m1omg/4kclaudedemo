@@ -16,7 +16,7 @@ rm -rf "$T" && mkdir -p "$T"
 cp "$OUT/brana.macho" "$T/a"
 chmod 755 "$T/a"
 (cd "$T" && tar --format=v7 --owner=0 --group=0 --numeric-owner --mtime=@0 -cf a.tar a)
-xz --format=xz --check=none --lzma2=preset=9e,dict=64KiB,lc=${LC:-2},lp=0,pb=0 -c "$T/a.tar" > "$T/a.tar.xz"
+"$ROOT/tools/xzbest.sh" "--format=xz --check=none --lzma2=preset=9e,dict=64KiB" "$T/a.tar" > "$T/a.tar.xz"
 HDR='tail -c+NN "$0"|tar -xJf - -C /tmp;exec /tmp/a'
 LEN=$(printf '#!/bin/sh\n%s\n' "$HDR" | wc -c)   # the offset has two digits
 HDR=$(echo "$HDR" | sed "s/NN/$((LEN + 1))/")
