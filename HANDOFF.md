@@ -22,7 +22,7 @@ Intel macOS. Everything is computed at runtime:
 
 | Platform | File | Size | Status |
 |---|---|---|---|
-| Windows | `dist/brana-windows.exe` | 3245 B | Works under Wine: 9.0 with Mesa llvmpipe; 11.18 with the NVIDIA driver renders and plays the right music. **Never run on real Windows.** |
+| Windows | `dist/brana-windows.exe` | 3424 B | Works under Wine: 9.0 with Mesa llvmpipe; 11.18 with the NVIDIA driver; 11.18 with llvmpipe posing as an OpenGL 3.3 GPU (PR #10). **Never run on real Windows.** |
 | Linux | `dist/brana-linux` | 4020 B | **Works on the owner's NVIDIA RTX 3060 PC:** the owner heard the music (PR #6). Also works on Mesa llvmpipe. |
 | macOS (Intel) | `dist/brana-macos` | 4091 B | **Confirmed on the owner's MacBook:** music plays and visuals render correctly (build before PR #4). **Only a few fps on its Intel HD Graphics** (open issue). PR #4 optimizations are untested there. |
 
@@ -295,12 +295,17 @@ Steps (each one a PR):
    Only variants that ran on the owner's Mac go in.
 3. Shader speed-ups that `macbench` shows help on the Intel GPU. Look changes
    need the owner's OK.
-4. Windows only:
-   - classic `glCreateShader`… path, so OpenGL 3.3 GPUs work (Mesa has
-     `glCreateShaderProgramv` on every driver, so Linux does not need it);
-   - music rendered in bands (the 2 s watchdog);
-   - `NvOptimusEnablement` / `AmdPowerXpressRequestHighPerformance` exports;
-   - `-msse2`.
+4. **Done (PR #10):** Windows only (section 5.7). Test recipe for an old GPU
+   under Wine: `env __GLX_VENDOR_LIBRARY_NAME=mesa
+   __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json
+   LIBGL_ALWAYS_SOFTWARE=1 MESA_GL_VERSION_OVERRIDE=3.3COMPAT wine
+   dist/brana-windows.exe`.
+   - Wine then returns no `glCreateShaderProgramv`, and the old exe crashed.
+   - Pass the variables one by one: the agent's zsh does not split a `$VARS`
+     string.
+   - `-msse2` is still to come with the scaling (float-to-int without the CRT).
+   - Mesa has `glCreateShaderProgramv` on every driver, so Linux does not need
+     this.
 5. Linux bytes: `glBindFramebufferEXT` with FBO name 1 (−14); a shared `frame`
    routine that also fixes a hidden start-up frame with an unset uniform (NaN
    rays, 120 steps per pixel); a minifier naming search; ELF header overlaps.
@@ -554,8 +559,18 @@ The bar is `B = time / 2`.
   Wine (32-bit prefix). The release builds use `/COMPMODE:VERYSLOW
   /ORDERTRIES:5000`. Crinkler 3.0 needs SSE4.2 at runtime.
 - **Window and GL:** a popup window of screen size (the `"edit"` class,
-  `WS_POPUP | WS_VISIBLE`), WGL legacy context, the same GL sequence as
-  Linux.
+  `WS_POPUP | WS_VISIBLE`), WGL legacy context. Since PR #10:
+  - OpenGL 3.3 is enough: programs are built with the 2.0 calls
+    (`glCreateShader`…`glLinkProgram`, fragment only; the compatibility
+    context's fixed-function vertex stage draws `glRects`) instead of
+    `glCreateShaderProgramv`; `glGetUniformLocation` for `u`.
+  - The music is rendered in 16 bands with `glFinish` in between, so no single
+    draw can hit the 2 s GPU watchdog (TDR) on a weak GPU. `gl_FragCoord` is
+    window relative, so the samples are bit-identical.
+  - Crinkler exports `NvOptimusEnablement` and
+    `AmdPowerXpressRequestHighPerformance`: hybrid laptops use the fast GPU.
+  - stdcall: every function pointer type must match the real signature
+    exactly (the callee pops the arguments), e.g. `glCreateProgram(void)`.
 - **Audio:** `waveOut` float with one buffer holding the whole song. Time =
   `waveOutGetPosition`. ESC via `GetAsyncKeyState(27)`.
 
@@ -563,7 +578,7 @@ The bar is `B = time / 2`.
 
 | Platform | Size | Left |
 |---|---|---|
-| Windows | 3245 B | 851 |
+| Windows | 3424 B | 672 |
 | Linux | 4020 B | 76 |
 | macOS | 4091 B | **5** |
 
@@ -686,6 +701,9 @@ ALSA_CONFIG_PATH=$S/asound_file.conf timeout 8 ./dist/brana-linux
 | #5 | `HANDOFF.md`, `CLAUDE.md`, `tools/bench.py`, `tools/flicker.py`, `tools/audiocmp.py`. Portable `check_shaders.sh` (`PYTHON`) and `build_mac.sh` (`LD64`). |
 | #6 | NVIDIA fix: `step(22., bb)` → `max(…, 0)` in `music.frag` (section 2). All three binaries and `tools/brana-diag` rebuilt (clang 22.1.8, nasm 3.02, Crinkler 3.0b Win64). `check_shaders.sh` shows the driver's log on failure. `HANDOFF.md` updated. |
 | #7 | Monolith streaks fixed: the march step never reaches a neighbouring cell's monolith (section 5.4). Paid for with two bit-identical rewrites. `tools/inside.py`. |
+| #8 | `tools/mac/macbench`: shader timings on the Mac's GPU (section 3.4). |
+| #9 | `tools/mac/test.sh` + variants: which macOS byte savings a real Mac accepts. macsim without root. |
+| #10 | Windows: OpenGL 3.3 (classic program calls), music in 16 bands, Optimus/PowerXpress exports. |
 
 ---
 

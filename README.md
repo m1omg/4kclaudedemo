@@ -11,7 +11,7 @@ a na konci sa vráti na horizont, kde sa všetko pomaly ponorí späť do tmy.
 
 | Súbor | Platforma | Veľkosť |
 |---|---|---|
-| [`dist/brana-windows.exe`](dist/brana-windows.exe) | Windows (32-bit exe, beží aj na 64-bit) | 3245 B |
+| [`dist/brana-windows.exe`](dist/brana-windows.exe) | Windows (32-bit exe, beží aj na 64-bit) | 3424 B |
 | [`dist/brana-linux`](dist/brana-linux) | Linux x86-64 (glibc) | 4020 B |
 | [`dist/brana-macos`](dist/brana-macos) | macOS 10.13+ na Intel Macu | 4091 B |
 
@@ -26,9 +26,11 @@ hudba (na GPU), preto je chvíľu čierna obrazovka.
 
 Stačí spustiť `brana-windows.exe` (dvojklik alebo z príkazového riadka).
 
-- Potrebné: grafika s OpenGL 4.1+, zvukové zariadenie a procesor s SSE4.2
+- Potrebné: grafika s OpenGL 3.3+, zvukové zariadenie a procesor s SSE4.2
   (požiadavka kompresora Crinkler 3.0, spĺňa ju prakticky každý procesor od
   roku 2011).
+- Na notebookoch s dvoma grafikami (NVIDIA Optimus, AMD) si intro vyžiada
+  výkonnejšiu z nich.
 - Súbor je skomprimovaný demoscénickým linkerom Crinkler. Niektoré antivírusy
   takéto súbory mylne označujú ako podozrivé (známy falošný poplach pri 4k
   intrách).
@@ -45,7 +47,9 @@ chmod +x brana-linux
 - Potrebné: X11 alebo XWayland (Wayland desktopy ho majú), OpenGL 4.1+ (Mesa
   alebo NVIDIA), knižnica ALSA `libasound.so.2` (PipeWire/PulseAudio cez ňu
   fungujú), program `xzcat` (balík `xz`/`xz-utils`, predinštalovaný takmer
-  všade) a jadro 3.19+.
+  všade) a jadro 3.19+. S ovládačmi Mesa stačí aj OpenGL 3.3.
+- Na notebookoch s dvoma grafikami spusti intro na výkonnejšej:
+  `DRI_PRIME=1 ./brana-linux` (Mesa) alebo `prime-run ./brana-linux` (NVIDIA).
 - Ako to funguje: prvých 240 bajtov súboru je malý ELF, ktorý zvyšok súboru
   (LZMA dáta) pošle cez `/usr/bin/xzcat` do pamäťového súboru (`memfd`) a ten
   spustí. Samotné intro importuje z glibc iba `dlopen` a `dlsym` bez verzií
@@ -213,8 +217,11 @@ a jeho nastavenie), prehrá 2 × 8 sekúnd hudby a prvých 60 s uloží do
 - Windows verzia: spustená pod Wine 9.0 (Xvfb, Mesa llvmpipe, PulseAudio):
   obraz, zvuk, časovanie aj ukončenie ESC fungujú. Pod Wine 11.18
   s ovládačom NVIDIA (Linux) vypočíta správnu hudbu a prehrá ju (zvuk
-  zachytený cez ALSA je bitovo zhodný s hudbou z tej istej GPU). Na
-  skutočnom Windows som ju spustiť nemohol.
+  zachytený cez ALSA je bitovo zhodný s hudbou z tej istej GPU). Pod Wine
+  s llvmpipe nastaveným ako stará grafika s OpenGL 3.3 (bez
+  `glCreateShaderProgramv`) predchádzajúca verzia hneď spadne, nová hrá
+  správne (zvuk bitovo zhodný s referenciou). Na skutočnom Windows som ju
+  spustiť nemohol.
 - macOS verzia: pozri upozornenie vyššie. Oprava zvuku pre NVIDIA sa jej
   týka len tým, že shader je o pár bajtov kratší; kompilátor shaderov
   v macOS pôvodný kód prijímal.
