@@ -1,0 +1,4 @@
+LIBRARY kernel32.dll
+EXPORTS
+ExitProcess@4
+LoadLibraryA@4

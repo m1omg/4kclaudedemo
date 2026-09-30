@@ -1,0 +1,8 @@
+LIBRARY user32.dll
+EXPORTS
+CreateWindowExA@48
+GetDC@4
+ShowCursor@4
+GetAsyncKeyState@4
+PeekMessageA@20
+GetSystemMetrics@4
