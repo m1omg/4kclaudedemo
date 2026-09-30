@@ -215,11 +215,7 @@ chmod +x brana-macos && ./brana-macos
   - 1:20–1:36 core;
   - 1:36–2:08 tunnel 2;
   - 2:08–2:26 outro.
-- To get numbers on the Mac, write a small GLUT harness (core profile, like
-  `src/mac/main.asm`) that renders `src/visual.frag` at the screen size for a
-  few seconds at given times and prints ms/frame. `tools/preview.c` is GLX
-  only. Build it with `clang -framework GLUT -framework OpenGL`; OpenGL is
-  deprecated but works.
+- Numbers on the Mac: `tools/mac/macbench` (section 3.4).
 
 ### 3.3 If it is still choppy (the owner's preference order)
 
@@ -248,6 +244,79 @@ separate low-spec version **only as a last resort**.
    - Needs about 50–80 bytes per platform. macOS has 5 bytes left, so it
      needs savings first.
 3. **Last resort:** a separate low-spec build.
+
+### 3.4 The weak-GPU plan (approved by the owner on 2026-10-01)
+
+The owner's decisions:
+- automatic resolution scaling: yes;
+- weak GPUs must keep a REASONABLE resolution ("not 320x240"): a floor of about
+  11/16 per axis, never below 5/8, chosen by the owner with `macbench look`;
+- powerful hardware must NEVER get a lower resolution;
+- targets: the Mac's Intel HD, Intel/AMD laptop graphics on Windows/Linux, and
+  old GPUs without OpenGL 4.1;
+- goal: about 30 fps;
+- the owner runs Mac tools and pastes their output.
+
+Steps (each one a PR):
+0. Mac baseline: the owner sends `sw_vers`, the GPU and screen from
+   `system_profiler SPDisplaysDataType`, `tar --version`, whether
+   `tar t </dev/null` reads stdin, and whether the current `dist/brana-macos`
+   starts at all (the lzma-alone dropper has never run on a real Mac).
+1. **Done (this PR):** `tools/mac/macbench`, measurements on the real GPU. Next:
+   `tools/mac/test.sh` with intro variants for the container savings of step 2.
+2. macOS container savings, measured by a design review (bytes):
+   - tar without the end-of-archive blocks: −20;
+   - `ld64.lld -no_exported_symbols`: −61;
+   - post-processing the Mach-O (drop the `__got`/`__bss`/`__text` section
+     headers and `LC_DATA_IN_CODE`, zero the symbol table counts): about −84;
+   - uniform location 0 instead of `glGetUniformLocation`: −25;
+   - short framework paths: −7;
+   - dropper header `tail -n+3 "$0"|tar x -C/tmp`: −2 to −8.
+
+   Only variants that ran on the owner's Mac go in.
+3. Shader speed-ups that `macbench` shows help on the Intel GPU. Look changes
+   need the owner's OK.
+4. Windows only:
+   - classic `glCreateShader`… path, so OpenGL 3.3 GPUs work (Mesa has
+     `glCreateShaderProgramv` on every driver, so Linux does not need it);
+   - music rendered in bands (the 2 s watchdog);
+   - `NvOptimusEnablement` / `AmdPowerXpressRequestHighPerformance` exports;
+   - `-msse2`.
+5. Linux bytes: `glBindFramebufferEXT` with FBO name 1 (−14); a shared `frame`
+   routine that also fixes a hidden start-up frame with an unset uniform (NaN
+   rays, 120 steps per pixel); a minifier naming search; ELF header overlaps.
+6. The scaling:
+   - Right after the music, time 2 frames of the heaviest moment offscreen
+     at half size, with `glFinish` (after one warm-up frame). This does not
+     depend on vsync.
+   - Pick k/16 in [floor..16] for about 33 ms, with a margin in favour of 16.
+   - k < 16: render into the FBO (the re-specified music texture) and
+     `glBlitFramebuffer(LINEAR)` to the window.
+   - k = 16: today's direct path; the blit mask is 0.
+
+`tools/mac/macbench` (source `tools/mac/macbench.c`, built by
+`tools/mac/build.sh`; `tools/mac/variants.py` makes the shader variants from
+`src/visual.frag`):
+- A macOS x86-64 binary cross-compiled on Linux without the Apple SDK.
+  Everything goes through dlopen/dlsym; `tools/mac/libSystem.tbd` adds
+  `dyld_stub_binder` for compiled C.
+- It renders offscreen into an FBO of the screen size and times with
+  `glFinish`, so the refresh rate does not matter. Printed:
+  - GL strings;
+  - music render time, in one draw and in 8 bands, and whether the bands are
+    bit-identical;
+  - uniform location;
+  - ms/frame of 7 shader variants at the 8 `bench.py` moments, at full and
+    half size;
+  - RGBA8 vs RGBA32F render target plus blit cost, and whether a
+    re-specified attached texture works;
+  - whether `dlopen` accepts the short framework paths.
+- `./macbench look` shows 3 scenes at 16/16, 14/16, 12/16, 11/16, 10/16 of
+  the screen resolution: the owner picks the floor.
+- `build/mac/macbench-linux` is the same source for Linux with freeglut. On
+  the RTX 3060 at 2560x1440 the current shader takes about 2 ms per frame, so
+  that GPU is far from any scaling. Freeglut itself raises one
+  `GL_INVALID_ENUM` at start-up in a core context.
 
 **Tried and rejected:**
 - Hit threshold `.001*t` instead of `.0005*t`: almost no fewer steps, and
@@ -318,6 +387,7 @@ Also requested:
 | `tools/check_shaders.sh` | Minified shaders must give **bit-identical** audio and frames (compat), and compile in a 3.3 core context (macOS path). Uses the default GL driver, so on the NVIDIA PC it is also the NVIDIA compile check; prints the driver's log on failure. |
 | `tools/build_win.sh`, `build_linux.sh`, `build_mac.sh`, `xzbest.sh` | Per-platform builds. `xzbest.sh` grid-searches LZMA encoder parameters. |
 | `tools/preview.c` | Dev harness: renders the music to a WAV and frames to PPM or a raw stream, through the same GL paths (compat or `-core`). |
+| `tools/mac/` | `macbench` (Mac GPU measurements, section 3.4), its source, build script and variant generator. |
 | `tools/diag.c`, `tools/brana-diag` | Linux diagnostic: replays the intro's startup and prints the GL driver, the music shader's link log, whether the rendered music matches the reference, and the ALSA setup; then plays 2 × 8 s and saves `brana-diag.wav`. Embeds the minified shader: rebuild it when `music.frag` changes. |
 | `tools/bench.py`, `tools/flicker.py`, `tools/inside.py`, `tools/audiocmp.py` | GPU cost per scene, temporal flicker metric, pixels whose ray ends inside a solid (must stay 0), recording-vs-reference audio comparison. |
 | `tools/analyze_audio.py`, `tools/contact.py`, `tools/stems.py` | Per-bar audio levels and spectrogram, contact sheets of frames, per-instrument stems (stale). |
