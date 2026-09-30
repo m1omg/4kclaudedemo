@@ -417,7 +417,11 @@ ROWS    equ SONG_SAMPLES / 2048 + 1
 attr:   dd 4, 5, 0              ; GLX_RGBA, GLX_DOUBLEBUFFER
 nsec:   dd 1.0e-9
 song_len: dd SONG_SECONDS
+%ifdef DEVICE                   ; (testing: play to another ALSA device)
+device: db DEVICE, 0
+%else
 device: db "default", 0
+%endif
 fs_name: db "_NET_WM_STATE_FULLSCREEN", 0
 state_name: db "_NET_WM_STATE", 0
 names:

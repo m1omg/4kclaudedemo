@@ -11,9 +11,9 @@ a na konci sa vráti na horizont, kde sa všetko pomaly ponorí späť do tmy.
 
 | Súbor | Platforma | Veľkosť |
 |---|---|---|
-| [`dist/brana-windows.exe`](dist/brana-windows.exe) | Windows (32-bit exe, beží aj na 64-bit) | 3122 B |
-| [`dist/brana-linux`](dist/brana-linux) | Linux x86-64 (glibc) | 3953 B |
-| [`dist/brana-macos`](dist/brana-macos) | macOS 10.13+ na Intel Macu | 4057 B |
+| [`dist/brana-windows.exe`](dist/brana-windows.exe) | Windows (32-bit exe, beží aj na 64-bit) | 3142 B |
+| [`dist/brana-linux`](dist/brana-linux) | Linux x86-64 (glibc) | 3972 B |
+| [`dist/brana-macos`](dist/brana-macos) | macOS 10.13+ na Intel Macu | 4081 B |
 
 ## Spustenie
 
@@ -116,7 +116,9 @@ bude intro len menej plynulé, nikdy nie pomalšie.
   rozladených pílových vĺn (discrete summation formula), FM arpeggio s
   ping-pong echom a lead s vibratom a echom; sidechain, riser, vírenie
   a crash. Časy sa počítajú z celočíselného indexu vzorky, takže ani na konci
-  skladby nevzniká fázový šum z presnosti float čísel.
+  skladby nevzniká fázový šum z presnosti float čísel, a fáza každého
+  oscilátora sa pred `sin`/`cos` zredukuje na jednu periódu (niektoré GPU
+  počítajú `sin` veľkých argumentov nepresne).
 - **Grafika** ([`src/visual.frag`](src/visual.frag)) je sphere tracing
   so štyrmi scénami, zrkadlovým odrazom podlahy, ambient occlusion,
   neónovou žiarou, hmlou, hviezdami a filmovým zrnom. Všetko je funkcia času
@@ -156,7 +158,11 @@ z ľubovoľného shadera), [`tools/contact.py`](tools/contact.py) a
 - Windows verzia: spustená pod Wine 9.0 (Xvfb, Mesa llvmpipe, PulseAudio):
   obraz, zvuk, časovanie aj ukončenie ESC fungujú. Na skutočnom Windows som ju
   spustiť nemohol.
-- Linux verzia: spustená na Ubuntu 24.04 (Xvfb, Mesa llvmpipe, PulseAudio),
-  vrátane ukončenia ESC; kompatibilita dynamickej sekcie overená aj so starým
-  dynamickým linkerom glibc 2.31.
+- Linux verzia: spustená na Ubuntu 24.04 (Xvfb, Mesa llvmpipe, PulseAudio
+  aj PipeWire 1.0), vrátane ukončenia ESC; zvuk, ktorý program posiela cez
+  ALSA, je bajt po bajte zhodný s referenčnou hudbou; kompatibilita dynamickej
+  sekcie overená aj so starým dynamickým linkerom glibc 2.31.
+- Na skutočnej grafickej karte som intro spustiť nemohol (k dispozícii bol
+  len softvérový renderer). Zaokrúhľovanie GPU som pri hľadaní blikania
+  napodobnil v shaderi.
 - macOS verzia: pozri upozornenie vyššie.

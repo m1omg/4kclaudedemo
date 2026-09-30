@@ -31,13 +31,16 @@ float map(vec3 p)
 {
 	float d, g, f = 1e9;
 	if (S < 1.) {
-		// horizon: monoliths rise (bars 8-14) and sink (66-72), the gate
+		// horizon: monoliths rise (bars 8-14) and sink (66-72), the gate.
+		// Only a limited field of them: in the distance their thin glowing caps
+		// get smaller than a pixel and sparkle, so outer cells sink below the floor.
 		vec2 id = floor(p.xz / 7.);
 		float h = hash(id);
-		h = (1. + 6. * h) * smoothstep(8., 14., B - hash(id.yx) * 3.) * smoothstep(72., 66., B - h * 3.) * step(1.5, abs(id.x));
+		h = (1. + 6. * h) * smoothstep(8., 14., B - hash(id.yx) * 3.) * smoothstep(72., 66., B - h * 3.) * step(1.5, abs(id.x)) - 9. * step(7., length(id + vec2(0, 4)));
 		vec3 c = p;
 		c.xz = mod(c.xz, 7.) - 3.5;
-		d = box(c, vec3(.7, h, .7));
+		d = box(c, vec3(.7, h + .01, .7));   // an unrisen monolith must not lie exactly in the
+		                                     // floor plane: rounding would pick a flickering winner
 		c.y -= h;
 		g = box(c, vec3(.6, .03, .6));  // glowing caps
 		f = p.y;
