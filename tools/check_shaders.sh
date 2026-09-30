@@ -2,6 +2,8 @@
 # Minifies the shaders and verifies that the minified versions are valid
 # GLSL 3.30 and render exactly the same audio and frames as the sources
 # (compat path) and also compile in a 3.3 core context (macOS path).
+# Needs $S/preview (tools/preview.c) and python3 with numpy and Pillow
+# (or set PYTHON=/path/to/python).
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 S=${S:-/tmp}
@@ -21,7 +23,7 @@ for t in 5 30 47.9 62 88 112 130; do
 	$P frame src/shaders.h.visual.frag.min $t 160 90 $S/chk_b.ppm 2>/dev/null
 	$P -core frame src/shaders.h.visual.frag.min $t 160 90 $S/chk_c.ppm 2>/dev/null
 	cmp $S/chk_a.ppm $S/chk_b.ppm
-	/usr/bin/python3.12 -c "
+	${PYTHON:-python3} -c "
 import sys, numpy as np
 from PIL import Image
 a = np.asarray(Image.open('$S/chk_a.ppm')).astype(int); c = np.asarray(Image.open('$S/chk_c.ppm')).astype(int)

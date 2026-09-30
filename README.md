@@ -154,8 +154,13 @@ CRINKLER=/cesta/k/Crinkler.exe ./build.sh
 `build.sh` zminifikuje shadery, zostaví všetky tri verzie do `dist/` a overí
 limit 4096 bajtov. Pri vývoji pomáhali
 [`tools/preview.c`](tools/preview.c) (vykreslenie snímok a WAV súboru
-z ľubovoľného shadera), [`tools/contact.py`](tools/contact.py) a
-[`tools/analyze_audio.py`](tools/analyze_audio.py).
+z ľubovoľného shadera), [`tools/contact.py`](tools/contact.py),
+[`tools/analyze_audio.py`](tools/analyze_audio.py),
+[`tools/bench.py`](tools/bench.py) (náročnosť grafiky pre GPU po scénach),
+[`tools/flicker.py`](tools/flicker.py) (miera blikania) a
+[`tools/audiocmp.py`](tools/audiocmp.py) (porovnanie nahrávky zvuku
+s referenciou). Stav práce a otvorené problémy pre ďalšie pokračovanie sú
+v [`HANDOFF.md`](HANDOFF.md).
 
 ## Diagnostika (Linux)
 
