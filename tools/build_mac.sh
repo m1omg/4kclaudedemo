@@ -5,8 +5,9 @@ set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${OUT:-$ROOT/build/mac}
 mkdir -p "$OUT"
+LD64=${LD64:-$(command -v ld64.lld-18 || command -v ld64.lld)}   # Ubuntu names it ld64.lld-18, Arch ld64.lld
 nasm -f macho64 -I "$ROOT/src/" "$ROOT/src/mac/main.asm" -o "$OUT/main.o"
-ld64.lld-18 -arch x86_64 -platform_version macos 10.13 10.13 -no_fixup_chains -no_uuid \
+"$LD64" -arch x86_64 -platform_version macos 10.13 10.13 -no_fixup_chains -no_uuid \
 	-no_function_starts -headerpad 0 -x -o "$OUT/brana.macho" "$OUT/main.o" \
 	"$ROOT/src/mac/tbd/libSystem.tbd"
 ls -l "$OUT/brana.macho"
