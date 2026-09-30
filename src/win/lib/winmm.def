@@ -1,0 +1,6 @@
+LIBRARY winmm.dll
+EXPORTS
+waveOutOpen@24
+waveOutPrepareHeader@12
+waveOutWrite@12
+waveOutGetPosition@12
