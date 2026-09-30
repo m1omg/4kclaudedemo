@@ -13,8 +13,7 @@ float B, S, V, G, M, Q;   // bar, scene, variation, distance to neon, material (
 
 mat2 rot(float a)
 {
-	float c = cos(a), s = sin(a);
-	return mat2(c, s, -s, c);
+	return mat2(cos(a), sin(a), -sin(a), cos(a));
 }
 
 float box(vec3 p, vec3 b)
@@ -34,14 +33,20 @@ float map(vec3 p)
 	if (S < 1.) {
 		// horizon: monoliths rise (bars 8-14) and sink (66-72), the gate.
 		// Only a limited field of them: in the distance their thin glowing caps
-		// get smaller than a pixel and sparkle, so outer cells sink below the floor.
+		// get smaller than a pixel and sparkle, so outer cells sink far below the floor.
 		vec2 id = floor(p.xz / 7.);
 		float h = hash(id);
-		h = (1. + 6. * h) * smoothstep(8., 14., B - hash(id.yx) * 3.) * smoothstep(72., 66., B - h * 3.) * step(1.5, abs(id.x)) - 9. * step(7., length(id + vec2(0, 4)));
+		h = (1. + 6. * h) * smoothstep(8., 14., B - hash(id.yx) * 3.) * smoothstep(72., 66., B - h * 3.) * step(1.5, abs(id.x)) - 1e3 * step(7., length(id + vec2(0, 4)));
 		vec3 c = p;
 		c.xz = mod(c.xz, 7.) - 3.5;
 		d = box(c, vec3(.7, h + .01, .7));   // an unrisen monolith must not lie exactly in the
 		                                     // floor plane: rounding would pick a flickering winner
+		// Only this cell's monolith is measured, so a step must not reach a
+		// neighbour's (6.3 from this cell's centre): a ray above a lower monolith
+		// would end inside a taller one next to it, and the AO would draw moving
+		// dark streaks. Sunk cells skip this (-min(h, 0.) is about 1e3 there): the
+		// camera is always inside the field, rays pass them only on the way out.
+		d = min(d, 6.3 - max(abs(c.x), abs(c.z)) - min(h, 0.));
 		c.y -= h;
 		g = box(c, vec3(.6, .03, .6));  // glowing caps
 		f = p.y * Q;   // while marching: distance along the ray to the floor plane
@@ -135,7 +140,7 @@ void main()
 				n = vec3(0, 1, 0);
 				if (m > 0.) n = normalize(e.xyy * map(p + e.xyy) + e.yyx * map(p + e.yyx) + e.yxy * map(p + e.yxy) + e.xxx * map(p + e.xxx));
 				d = G;
-				vec3 l = (S < 1. ? vec3(0, 6.5, 0) : vec3(0)) - p;
+				vec3 l = vec3(0, S < 1. ? 6.5 : 0., 0) - p;
 				float ao = 1.;
 				for (int j = 1; j < 5; j++) if (m > 0.) ao -= (j * .2 - map(p + n * j * .2)) / j * .5;   // (none on the floor: invisible there)
 				c = (nc * glow * (S < 1. ? max(dot(n, normalize(l)), 0.) * 50. / (1. + dot(l, l)) : 3. * exp(-d * 3.)) + fog * 4.) * .15 * clamp(ao, 0., 1.);
