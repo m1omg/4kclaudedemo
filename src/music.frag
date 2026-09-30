@@ -45,7 +45,7 @@ vec2 song(int i)
 		drop * (sb >> 2 & 1) * ((n * .6 + hp * .3) * (exp(-tb * 20.) + exp(-mod(tb, .011) * 300.) * step(tb, .033)) + sin(1162. * tb) * exp(-tb * 25.) * .3) * .4 +
 		kick * sin(300. * tb - 37.7 * exp(-tb * 25.)) * .9 +
 		// build-up: snare roll and noise riser; crash on the drops
-		(bb > 19 && bar < 48 ? (n * .7 + hp * .3) * exp(-(bb > 22 ? ts : mod(tb, .25)) * 25.) * (bb * 16 + sb - 351) / 64. * step(22., bb) +
+		(bb > 19 && bar < 48 ? (n * .7 + hp * .3) * exp(-(bb > 22 ? ts : mod(tb, .25)) * 25.) * max(bb * 16 + sb - 351, 0) / 64. +
 			n * pow((tc + (bar >> 1 & 1) * 4.) / 8., 3.) * .3 : 0.) +
 		((bar >> 1) % 12 == 0 && (bar >> 1) % 36 > 0 ? hp * exp(-tc * 1.3) * .25 : 0.)),
 		s = vec2(0);
