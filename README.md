@@ -11,8 +11,8 @@ a na konci sa vráti na horizont, kde sa všetko pomaly ponorí späť do tmy.
 
 | Súbor | Platforma | Veľkosť |
 |---|---|---|
-| [`dist/brana-windows.exe`](dist/brana-windows.exe) | Windows (32-bit exe, beží aj na 64-bit) | 3142 B |
-| [`dist/brana-linux`](dist/brana-linux) | Linux x86-64 (glibc) | 3972 B |
+| [`dist/brana-windows.exe`](dist/brana-windows.exe) | Windows (32-bit exe, beží aj na 64-bit) | 3183 B |
+| [`dist/brana-linux`](dist/brana-linux) | Linux x86-64 (glibc) | 4013 B |
 | [`dist/brana-macos`](dist/brana-macos) | macOS 10.13+ na Intel Macu | 4081 B |
 
 ## Spustenie
@@ -60,19 +60,19 @@ chmod +x brana-macos
 ./brana-macos
 ```
 
-- Súbor je krátky shell skript s pripojeným `tar.xz` archívom: rozbalí 12 KB
-  binárku do `/tmp/a` (systémovým `tar`) a spustí ju. macOS nemá spôsob, ako
+- Súbor je krátky shell skript s pripojeným `tar` archívom komprimovaným LZMA:
+  rozbalí 12 KB binárku do `/tmp/a` (systémovým `tar`, ktorý kompresiu
+  rozpozná sám) a spustí ju. macOS nemá spôsob, ako
   spustiť skomprimovanú Mach-O binárku priamo, preto je to riešené takto (tzv.
   dropper, bežná prax pri 4k intrách pre Linux/macOS).
 - Potrebné: macOS 10.13 alebo novší, OpenGL 3.2+ core profil, GLUT a
   AudioToolbox (súčasť macOS).
-- **Upozornenie:** túto verziu som nemohol spustiť na skutočnom Macu (vývoj
-  prebiehal na Linuxe bez Apple SDK). Jej strojový kód je otestovaný
-  v simulácii [`tools/macsim`](tools/macsim): ten istý assembler preložený
-  ako Linux ELF, s náhradnými GLUT/OpenGL/AudioToolbox knižnicami na macOS
-  cestách — obraz, zvuk aj ukončenie fungujú a kód v Mach-O súbore je bajt po
-  bajte zhodný (okrem 31 relokácií). Overiť som nemohol samotné načítanie
-  Mach-O súboru cez `dyld` a správanie Apple GLUT.
+- Predchádzajúca verzia (ešte s `tar.xz`) je vyskúšaná na skutočnom Macu
+  s Intel HD Graphics: obraz aj hudba fungujú. Vývoj prebieha na Linuxe bez
+  Apple SDK; strojový kód sa testuje v simulácii [`tools/macsim`](tools/macsim)
+  (ten istý assembler preložený ako Linux ELF, s náhradnými
+  GLUT/OpenGL/AudioToolbox knižnicami na macOS cestách) a rozbalenie droppera
+  s `bsdtar` (libarchive, rovnako ako `tar` v macOS).
 
 ## Pravidlá
 
@@ -122,7 +122,11 @@ bude intro len menej plynulé, nikdy nie pomalšie.
 - **Grafika** ([`src/visual.frag`](src/visual.frag)) je sphere tracing
   so štyrmi scénami, zrkadlovým odrazom podlahy, ambient occlusion,
   neónovou žiarou, hmlou, hviezdami a filmovým zrnom. Všetko je funkcia času
-  prepočítaného na takty, preto sedí na hudbu.
+  prepočítaného na takty, preto sedí na hudbu. Kvôli slabším GPU lúč
+  smerujúci nadol skočí k podlahe priamo (vzdialenosť po lúči k rovine
+  namiesto výšky nad ňou), lúč nad všetkými objektmi sa hneď ukončí a pre
+  neónové povrchy sa nepočíta normála ani ambient occlusion. Scény
+  s horizontom sú vďaka tomu asi 2,5× rýchlejšie a obraz sa nezmenil.
 - **Minifikácia**: [`tools/minify.py`](tools/minify.py) odstráni komentáre
   a medzery a premenuje identifikátory podľa rozsahu platnosti.
   [`tools/check_shaders.sh`](tools/check_shaders.sh) overí, že minifikovaná
