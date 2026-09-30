@@ -174,7 +174,8 @@ z ľubovoľného shadera), [`tools/contact.py`](tools/contact.py),
 [`tools/bench.py`](tools/bench.py) (náročnosť grafiky pre GPU po scénach),
 [`tools/flicker.py`](tools/flicker.py) (miera blikania) a
 [`tools/audiocmp.py`](tools/audiocmp.py) (porovnanie nahrávky zvuku
-s referenciou). Stav práce a otvorené problémy pre ďalšie pokračovanie sú
+s referenciou) a [`tools/mac/macbench`](tools/mac) (meranie rýchlosti
+shaderov na GPU Macu). Stav práce a otvorené problémy pre ďalšie pokračovanie sú
 v [`HANDOFF.md`](HANDOFF.md).
 
 ## Diagnostika (Linux)
