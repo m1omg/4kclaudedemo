@@ -281,20 +281,14 @@ draw:
 	cvtsi2ss xmm0, eax
 	mulss xmm0, [msec]
 	movss [uni], xmm0
-	mov edi, 102                ; GLUT_WINDOW_WIDTH
-	call [rbx + glutGet]
-	mov [size], eax
+	mov edi, 102                ; GLUT_WINDOW_WIDTH (GLUT's default reshape
+	call [rbx + glutGet]        ; callback keeps the viewport in sync)
 	cvtsi2ss xmm0, eax
 	movss [uni + 4], xmm0
 	mov edi, 103                ; GLUT_WINDOW_HEIGHT
 	call [rbx + glutGet]
 	cvtsi2ss xmm0, eax
 	movss [uni + 8], xmm0
-	xor edi, edi
-	xor esi, esi
-	mov edx, [size]
-	mov ecx, eax
-	call [rbx + glViewport]
 	mov edi, [loc]
 	push 1
 	pop rsi
@@ -362,6 +356,5 @@ fbo:    resd 1
 loc:    resd 1
 start:  resd 1
 pos:    resd 1
-size:   resd 1
 alignb 16
 song:   resb ROWS * 1024 * 16 + CHUNK * 64

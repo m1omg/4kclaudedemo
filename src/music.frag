@@ -51,7 +51,7 @@ vec2 song(int i)
 
 	// rolling bass: the three 16ths after each kick
 	x = freq(D[16 + (bar >> 1 & 3)] + (sb & 3) / 3 * 12) * ts;
-	s += float(sec & 0x1F3FC) / sec * sign(sb & 3) * sin(x + 2. * exp(-ts * 20.) * sin(x)) * exp(-ts * 8.) * min(ts * 300., 1.) * smoothstep(.125, .1, ts) * .45;
+	s += float(sec & 0x1F3FC) / sec * sign(sb & 3) * sin(x + 2. * exp(-ts * 20.) * sin(x)) * exp(-ts * 8.) * min(ts * 300., 1.) * smoothstep(.125, .11, ts) * .45;
 
 	// pad: current chord plus the release of the previous one
 	for (int c = 0; c < 2; c++) {
@@ -67,7 +67,7 @@ vec2 song(int i)
 		if ((s2 & 16) > 0) q = 7 - q;
 		x = freq(D[(s2 >> 5 & 3) * 4 + (q & 3)] + 12 + q / 4 * 12) * ts;
 		s += sin(x + (.5 + 1.5 * smoothstep(4., 24., bars)) * exp(-ts * 12.) * sin(2. * x)) * exp(-ts * 10.) * smoothstep(.125, .11, ts) *
-			min(ts * 500., 1.) * pow(.45, k) * (.65 + vec2(.35, -.35) * (k < 1 ? 0. : k % 2 * 2. - 1.)) *
+			min(ts * 300., 1.) * pow(.45, k) * (.65 + vec2(.35, -.35) * (k < 1 ? 0. : k % 2 * 2. - 1.)) *
 			float(sec & 0x3FFFE) / sec * (.4 + .6 * smoothstep(16., 24., bars)) * .2;
 	}
 
@@ -82,7 +82,7 @@ vec2 song(int i)
 				y = (ms - acc) * .125 + ts;
 				x = freq(D[j] / 8 + 69) * (y + sin(y * 35.) * smoothstep(.15, .5, y) * .0002);
 				s += (saw(x, .7) + saw(x * 1.006 + 1., .7)) * min(y * 50., 1.) * smoothstep(d * .25, d * .25 - .04, y) *
-					(.6 + .4 * exp(-y * 3.)) * pow(.4, k) * (.7 + vec2(.3, -.3) * (k < 1 ? 0. : k % 2 * 2. - 1.)) * .7;
+					(.6 + .4 * exp(-y * 3.)) * pow(.4, k) * (.65 + vec2(.35, -.35) * (k < 1 ? 0. : k % 2 * 2. - 1.)) * .7;
 				break;
 			}
 			acc += d * 2;

@@ -9,7 +9,7 @@
 uniform vec4 u;
 out vec4 o;
 
-float B, S, G, M;   // bar, scene, distance to neon, material (0 floor, 1 solid, 2 neon)
+float B, S, V, G, M;   // bar, scene, variation, distance to neon, material (0 floor, 1 solid, 2 neon)
 
 mat2 rot(float a)
 {
@@ -23,7 +23,7 @@ float box(vec3 p, vec3 b)
 	return length(max(p, 0.)) + min(max(p.x, max(p.y, p.z)), 0.);
 }
 
-float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9, 78.2))) * 43758.); }
 
 float torus(vec3 p, float r, float t) { return length(vec2(length(p.xy) - r, p.z)) - t; }
 
@@ -34,15 +34,16 @@ float map(vec3 p)
 		// horizon: monoliths rise (bars 8-14) and sink (66-72), the gate
 		vec2 id = floor(p.xz / 7.);
 		float h = hash(id);
-		h = (1. + 6. * h) * smoothstep(8., 14., B - hash(id.yx) * 3.) * smoothstep(72., 66., B - h * 3.);
+		h = (1. + 6. * h) * smoothstep(8., 14., B - hash(id.yx) * 3.) * smoothstep(72., 66., B - h * 3.) * step(1.5, abs(id.x));
 		vec3 c = p;
 		c.xz = mod(c.xz, 7.) - 3.5;
-		c.y -= h * .5;
-		d = max(box(c, vec3(.7, h * .5, .7)), 8. - abs(p.x));
+		d = box(c, vec3(.7, h, .7));
+		c.y -= h;
+		g = box(c, vec3(.6, .03, .6));  // glowing caps
 		f = p.y;
 		p.y -= 6.5;
 		d = min(d, torus(p, 6., .4));
-		g = torus(p, 5.5, .05);
+		g = min(g, torus(p, 5.5, .05));
 	} else if (S == 2.) {
 		// the core: nested rotating rings
 		d = f;
@@ -54,9 +55,10 @@ float map(vec3 p)
 			g = min(g, torus(p, 1.6 + i * .5, .015));
 		}
 	} else {
-		// tunnels: frames of 4 (drop 1) or 8 (drop 2) segments
-		float n = S * 2. + 2., l = n < 5. ? 4.3 : 1.4;
-		p.xy *= rot(floor(p.z / 4.) * .2 + B * (S - 2.) * .8);
+		// tunnels: closed polygons (drop 1) or segmented ones (drop 2), the
+		// number of sides changes every 4 bars
+		float n = S * 2. + 2. + V, l = 4.3 * tan(3.1416 / n) - (S - 1.) * .2;
+		p.xy *= rot(floor(p.z / 4.) * (.1 + V * .1) + B * (S - 2.) * .8);
 		p.z = mod(p.z, 4.) - 2.;
 		p.xy *= rot(floor(atan(p.y, p.x) / 6.283 * n + .5) / n * 6.283);
 		p.x -= 4.3;
@@ -82,25 +84,22 @@ void main()
 	if (B < 24.) {
 		S = 0.;
 		k = B / 24.;
-		ro = vec3(0, mix(1.2, 6.5, smoothstep(10., 24., B)), mix(-70., 1., k * k));
-		ta = ro + vec3(0, .15 - .15 * smoothstep(14., 24., B) + smoothstep(8., 0., B), 1);
-	} else if (B < 40.) {
-		S = 1.;
-		ro = vec3(sin(B * 1.4), cos(B), B * 16.);
+		ro = vec3(sin(B * .4) * 3. * (1. - k), mix(1.2, 6.5, smoothstep(10., 24., B)), mix(-70., 1., k * k));
+		ta = ro + vec3(-ro.x * .1, .15 - .15 * smoothstep(14., 24., B) + smoothstep(6., 0., B), 1);
+	} else if (B < 40. || B > 48. && B < 64.) {
+		S = B < 40. ? 1. : 3.;
+		V = mod(floor(B / 4.), 3.);
+		ro = vec3(sin(B * 1.4), cos(B), B * 18.);
 		ta = ro + vec3(sin(B * .6) * .3, 0, 1);
-		r = sin(B * .5) * .8;
+		r = B * (V - 1.) * .4;
+		nc = S > 1. ? vec3(.2, .8, 1) : nc;
+		nc = mix(nc, nc.xzy, V * .5);
 	} else if (B < 48.) {
 		S = 2.;
 		k = 7. - smoothstep(44., 48., B) * 4.;
 		ro = vec3(sin(B * .4) * k, 2., cos(B * .4) * k);
 		ta = vec3(0);
 		nc = vec3(.3, .6, 1);
-	} else if (B < 64.) {
-		S = 3.;
-		ro = vec3(sin(B * 1.8) * 1.5, cos(B * 1.2) * 1.5, B * 20.);
-		ta = ro + vec3(sin(B * .8) * .4, 0, 1);
-		r = B * .6;
-		nc = vec3(.2, .8, 1);
 	} else {
 		S = 0.;
 		k = (B - 64.) / 9.;
