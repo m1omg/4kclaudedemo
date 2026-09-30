@@ -153,6 +153,21 @@ limit 4096 bajtov. Pri vývoji pomáhali
 z ľubovoľného shadera), [`tools/contact.py`](tools/contact.py) a
 [`tools/analyze_audio.py`](tools/analyze_audio.py).
 
+## Diagnostika (Linux)
+
+Ak na Linuxe namiesto hudby počuť niečo iné, spusti v termináli
+[`tools/brana-diag`](tools/brana-diag) (zdroj [`tools/diag.c`](tools/diag.c)):
+
+```sh
+chmod +x brana-diag
+./brana-diag
+```
+
+Zopakuje štart intra krok po kroku (OpenGL ovládač, preklad shadera hudby,
+framebuffer, porovnanie vypočítanej hudby s referenciou, ALSA zariadenie
+a jeho nastavenie), prehrá 2 × 8 sekúnd hudby a prvých 60 s uloží do
+`brana-diag.wav`.
+
 ## Testovanie
 
 - Windows verzia: spustená pod Wine 9.0 (Xvfb, Mesa llvmpipe, PulseAudio):
