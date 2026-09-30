@@ -9,7 +9,7 @@
 uniform vec4 u;
 out vec4 o;
 
-float B, S, V, G, M;   // bar, scene, variation, distance to neon, material (0 floor, 1 solid, 2 neon)
+float B, S, V, G, M, Q;   // bar, scene, variation, distance to neon, material (0 floor, 1 solid, 2 neon), floor scale
 
 mat2 rot(float a)
 {
@@ -30,6 +30,7 @@ float torus(vec3 p, float r, float t) { return length(vec2(length(p.xy) - r, p.z
 float map(vec3 p)
 {
 	float d, g, f = 1e9;
+	if (p.y > 13.) return G = 1e3;   // above everything: the ray only goes up from here
 	if (S < 1.) {
 		// horizon: monoliths rise (bars 8-14) and sink (66-72), the gate.
 		// Only a limited field of them: in the distance their thin glowing caps
@@ -43,7 +44,7 @@ float map(vec3 p)
 		                                     // floor plane: rounding would pick a flickering winner
 		c.y -= h;
 		g = box(c, vec3(.6, .03, .6));  // glowing caps
-		f = p.y;
+		f = p.y * Q;   // while marching: distance along the ray to the floor plane
 		p.y -= 6.5;
 		d = min(d, torus(p, 6., .4));
 		g = min(g, torus(p, 5.5, .05));
@@ -114,6 +115,7 @@ void main()
 	float glow = (S < 1. ? smoothstep(0., 16., B) * smoothstep(73., 66., B) : 1.) * (1. + K);
 	for (int b = 0; b < 2; b++) {
 		t = gl = 0.;
+		Q = -1. / min(rd.y, -1e-6);   // reach the floor in one step instead of creeping down to it
 		for (int i = 0; i < 120; i++) {
 			d = map(ro + rd * t);
 			gl += .002 / (.002 + G * G);
@@ -122,21 +124,25 @@ void main()
 		}
 		p = ro + rd * t;
 		m = M;
+		Q = 1.;
 		fog = vec3(.004, .006, .012) + nc * .04 * exp(-abs(rd.y) * 12.) * glow;
 		c = rd * 300.;
 		c = fog + (S < 1. ? smoothstep(.3, .1, length(fract(c) - .5)) * step(.97, hash(floor(c.xy) + floor(c.z) * 7.)) : 0.);
 		if (t < 150.) {
-			vec2 e = vec2(.001, -.001);
-			n = normalize(e.xyy * map(p + e.xyy) + e.yyx * map(p + e.yyx) + e.yxy * map(p + e.yxy) + e.xxx * map(p + e.xxx));
-			d = G;
-			vec3 l = (S < 1. ? vec3(0, 6.5, 0) : vec3(0)) - p;
-			float ao = 1.;
-			for (int j = 1; j < 5; j++) ao -= (j * .2 - map(p + n * j * .2)) / j * .5;
-			c = m > 1. ? nc * 5. * glow :
-				(nc * glow * (S < 1. ? max(dot(n, normalize(l)), 0.) * 50. / (1. + dot(l, l)) : 3. * exp(-d * 3.)) + fog * 4.) * .15 * clamp(ao, 0., 1.);
+			c = nc * 5. * glow;
+			if (m < 2.) {   // not neon: needs the normal (analytic for the floor) and ambient occlusion
+				vec2 e = vec2(.001, -.001);
+				n = vec3(0, 1, 0);
+				if (m > 0.) n = normalize(e.xyy * map(p + e.xyy) + e.yyx * map(p + e.yyx) + e.yxy * map(p + e.yxy) + e.xxx * map(p + e.xxx));
+				d = G;
+				vec3 l = (S < 1. ? vec3(0, 6.5, 0) : vec3(0)) - p;
+				float ao = 1.;
+				for (int j = 1; j < 5; j++) if (m > 0.) ao -= (j * .2 - map(p + n * j * .2)) / j * .5;   // (none on the floor: invisible there)
+				c = (nc * glow * (S < 1. ? max(dot(n, normalize(l)), 0.) * 50. / (1. + dot(l, l)) : 3. * exp(-d * 3.)) + fog * 4.) * .15 * clamp(ao, 0., 1.);
+				rd = reflect(rd, n);
+				ro = p + n * .01;
+			}
 			c = mix(c, fog, 1. - exp(-t * .015));
-			rd = reflect(rd, n);
-			ro = p + n * .01;
 		}
 		col += att * (c + gl * nc * .01 * glow);
 		if (m > 0. || t > 150.) break;
