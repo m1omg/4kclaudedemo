@@ -8,3 +8,4 @@ glViewport@16
 glBindTexture@8
 glTexImage2D@36
 glReadPixels@28
+glFinish@0
