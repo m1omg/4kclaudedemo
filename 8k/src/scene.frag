@@ -1,19 +1,23 @@
 #version 330
 // ROZMERY - visuals. u = (time in seconds, width, height, 0).
 // The bar B (125 BPM: 1.92 s) drives everything, in sync with the music:
-//    0-31  a building assembles itself (ground, columns, slabs, stairs, facade)
-//   31-35  dusk, the lights come on
-//   35-40  the building turns into its frame, the frame collapses to a point
-//   40-64  the tesseract: point, line, square, cube, tesseract; 4D rotation;
-//          3D slices through it
-//   64-100 the Mandelbulb grows out of a sphere; the camera dives to its surface
+//    0-30  a building assembles itself (ground, columns, slabs, stairs, facade)
+//   30-34  dusk, the lights come on; the building's frame glows
+//   34-36.5 the building takes itself apart (its clock T runs back, eased)
+//   36.5-38 the frame collapses: depth, height, width; a point
+//   38-62  the tesseract: point, line, square, cube, tesseract (one camera move
+//          from the dusk shot); 4D rotation; 3D slices through it
+//   62-70  it collapses; the Mandelbulb grows out of the point, breathes
+//   70-78  the camera dives into the same bulb, over a ridge onto a causeway
+//   78-94  a low, weaving flight along the causeway toward the rising sun
+//   94-104 pull-up over the far ridge, back out to the whole bulb; fade
 uniform vec4 u;
 out vec4 o;
 
-float B, T, N, M, E, Q, Z;   // bar; the building's clock (runs backwards at bars 34-36); night;
+float B, T, N, M, E, Q, Z;   // bar; the building's clock (runs back at bars 34-36.5); night;
                           // material and glow of the last map() (0 ground, 1 concrete, 2 steel, 3 glass);
                           // Q: while marching a ray downwards 1/-rd.y (distance along the ray to the ground), else 1;
-                          // Z: the scale of the view (shrinks in the dive into the Mandelbulb)
+                          // Z: the scale of the view (the camera's height above the causeway in the flight)
 vec3 L, U;       // direction to the sun; the camera's up
 
 mat2 rot(float a)
@@ -54,18 +58,19 @@ void add(float d, float m, float e)
 
 void building(vec3 p)
 {
-	D = B < 70. ? p.y * Q : 1e9;   // the ground (gone in the sky of the finale)
+	D = B < 70. ? p.y * Q : 1e9;   // the ground (it fades away at bars 66-70)
 	M = 0.;
 	E = 0.;
-	float b = box(p - vec3(1, 13, 0), vec3(8.5, 13.5, 6.5)), h = .3 * grow(4., 1.5);
+	float b = box(p - vec3(.75, 13, 0), vec3(8.75, 13.5, 6.5)), h = .3 * grow(4., 1.5);
 	if (h == 0. || B > 63.)
 		return;   // (nothing built)
 	if (b > 1.) {
-		add(b, 9., 0.);   // (only the bounding box: no penumbra for the soft shadows)
+		add(b, 9., 0.);   // (only the bounding box, which encloses everything incl. the plinth and the
+		                  // stairs: no penumbra for the soft shadows)
 		return;
 	}
-	// plinth, rising out of the ground (bars 4-5.5)
-	add(box(p - vec3(0, h - .31, 0), vec3(8, .3, 6)), 1., 0.);
+	// plinth, rising out of the ground (bars 4-5.5); wider on the east, under the stairs
+	add(box(p - vec3(.5, h - .31, 0), vec3(8.5, .3, 6)), 1., 0.);
 	// columns on a 3 x 4 grid, rising floor by floor with a small stagger
 	vec3 q = p;
 	vec2 c = clamp(round(p.xz / vec2(3, 4)), vec2(-2, -1), vec2(2, 1));
@@ -78,13 +83,15 @@ void building(vec3 p)
 	h = rise(-.5);
 	if (h > 0.)
 		add(box(p - vec3(0, h * .5, 0), vec3(1.5, h * .5, 1)), 1., 0.);
-	// floor slabs 1-6 slide out of the core (each 1.5 bars, from bar 6)
-	float lv = clamp(round(p.y / 3.), 1., 6.);
-	g = grow(2. + 4. * lv, 1.5);
-	vec2 ex = mix(vec2(1.5, 1), vec2(7, 5), g);
-	q = p - vec3(0, 3. * lv, 0);
-	if (g > 0.)
-		add(box(q, vec3(ex.x, .15, ex.y)), 1., g < 1. ? exp(max(abs(q.x) - ex.x, abs(q.z) - ex.y) * 30.) : 0.);
+	// floor slabs 1-6 slide out of the core (each 1.5 bars, from bar 6); the two nearest
+	for (float k = 0.; k < 2.; k++) {
+		float lv = clamp(floor(p.y / 3.) + k, 1., 6.);
+		g = grow(2. + 4. * lv, 1.5);
+		vec2 ex = mix(vec2(1.5, 1), vec2(7, 5), g);
+		q = p - vec3(0, 3. * lv, 0);
+		if (g > 0.)
+			add(box(q, vec3(ex.x, .15, ex.y)), 1., g < 1. ? exp(max(abs(q.x) - ex.x, abs(q.z) - ex.y) * 30.) : 0.);
+	}
 	// facade of floor f: mullions rise (bars 7 + 4f), then glass (8 + 4f)
 	float f = clamp(floor(p.y / 3.), 0., 5.), y = p.y - 3. * f - .15;
 	vec2 e2 = abs(p.xz) - vec2(6.85, 4.85);
@@ -95,12 +102,14 @@ void building(vec3 p)
 	h = 2.7 * grow(8. + 4. * f, 1.5);
 	if (h > 0.)
 		add(max(abs(sh + .02) - .012, abs(y - h * .5) - h * .5), 3., h < 2.7 ? exp(-abs(y - h) * 30.) : 0.);
-	// stairs on the east side: a zigzag of flights, one step per beat
-	float z = p.z * (1. - 2. * mod(f, 2.)), n = clamp(floor((z + 3.6) / .45), 0., 15.);
-	for (float k = 0.; k < 2.; k++) {
-		float m = clamp(n + k - 1. + step(.5, fract((z + 3.6) / .45)), 0., 15.), v = clamp(4. * (T - 6.) - f * 16. - m, 0., 1.);
+	// stairs on the east side: a zigzag of flights, one step per beat (of the two nearest
+	// flights, the two steps nearest along the slope)
+	for (float k = 0.; k < 4.; k++) {
+		f = clamp(floor(p.y / 3. - .5) + floor(k * .5), 0., 5.);
+		float z = p.z * (1. - 2. * mod(f, 2.)) + 3.375, y = p.y - 3. * f - .1475,
+			m = clamp(floor((z * .45 + y * .1875) / .2377) + mod(k, 2.), 0., 15.), v = clamp(4. * (T - 6.) - f * 16. - m, 0., 1.);
 		if (v > 0.)
-			add(box(vec3(p.x - 8., p.y - 3. * f - (m + 1.) * .1875 + .04, z + 3.6 - .45 * (m + .5)), vec3(.7 * v, .04, .22)), 2., (1. - v) * 3.);
+			add(box(vec3(p.x - 8., y - m * .1875, z - .45 * m), vec3(.7 * v, .04, .22)), 2., (1. - v) * 3.);
 	}
 	// roof: parapet (bar 26), plant room and mast (bars 28-31)
 	h = .6 * grow(26., 1.);
@@ -117,9 +126,9 @@ void building(vec3 p)
 
 vec3 sky(vec3 rd)
 {
-	vec3 c = mix(mix(vec3(.95, .6, .35), vec3(.25, .42, .75), smoothstep(0., .5, abs(rd.y))),
-		mix(vec3(.4, .22, .3), vec3(.015, .02, .06), smoothstep(0., .35, abs(rd.y))), N);
-	return c + vec3(1, .6, .3) * (pow(max(dot(rd, L), 0.), 300.) * 8. + pow(max(dot(rd, L), 0.), 8.) * .3) * (1. - N) * smoothstep(-.05, .1, rd.y);
+	vec3 c = mix(mix(vec3(.95, .6, .35), vec3(.25, .42, .75), smoothstep(0., .5, abs(dot(rd, U)))),
+		mix(vec3(.4, .22, .3), vec3(.015, .02, .06), smoothstep(0., .35, abs(dot(rd, U)))), N);
+	return c + vec3(1, .6, .3) * (pow(max(dot(rd, L), 0.), 300.) * 8. + pow(max(dot(rd, L), 0.), 8.) * .3) * (1. - N) * smoothstep(-.05, .1, dot(rd, U));
 }
 
 // --- the tesseract ----------------------------------------------------------
@@ -222,38 +231,47 @@ void camera(out vec3 ro, out vec3 ta)
 	} else if (B < 30.) {   // looking up at the facade
 		ro = vec3(-20. + (B - 22.) * .6, 1.2, 17.);
 		ta = vec3(0, 9. + (B - 22.) * .4, 0);
-	} else if (B < 38.) {   // dusk; the building unbuilds itself, its frame collapses
-		ro = vec3(30. - (B - 30.) * 1.5, 5. + (B - 30.) * .3, -26. + (B - 30.) * 1.2);
-	} else if (B > 78.) {   // the dive to a peak on the crown of the bulb, the view along its slope:
-		// the height h above it shrinks (self-similar: a landscape at every scale)
-		vec3 n = vec3(0, .915, .403), g = vec3(0, -.403, .915), s = C + vec3(-.081, .997, .46) * 5.;
-		float h = 10. * Z;
-		ro = s + n * h - g * 2. * h;
-		ta = s + g * 2. * h - n * h * max(86. - B, 0.) * .3;   // (at first looking down at the bulb)
-		U = n;
-	} else if (B > 62.) {   // the Mandelbulb
-		ro = C + vec3(sin(B * .1 - 4.4) * 16., 3., cos(B * .1 - 4.4) * 16.);
-	} else {   // around the tesseract: wide while it grows, closer while it turns, above while it is sliced
+	} else if (B < 46.) {   // dusk; the building takes itself apart, its frame collapses to a point
+		// that grows into the tesseract: one move, in towards the point and out again
+		b = smoothstep(36., 40., B);
+		float a = 2.29 + (B - 30.) * .04;
+		ro = C + vec3(sin(a), 0, cos(a)) * mix(40. - (B - 30.) * 2.5, 13. + (B - 38.) * .6, b) + vec3(0, mix((B - 30.) * .3 - 4.6, 2., b), 0);
+	} else if (B > 62.) {   // the Mandelbulb (bulb units: x 5): an orbit that dives over a ridge onto a causeway
+		// along its equator, a low, weaving flight toward the rising sun (lower and lower, so faster and
+		// faster), a pull-up over the far ridge and back out to the orbit
+		b = clamp((B - 70.) / 8., 0., 1.);
+		float k = smoothstep(70., 78., B), c = smoothstep(93., 100., B), f = k * (1. - c),
+			ph = -.1376 - .0306 * (B - 70.) - .0694 * (B < 70. ? B - 70. : 8. * (b - b * b * b + b * b * b * b * .5)),
+			th = mix(1.39 + .1808 * k + .004 * sin(B * 1.571) * k, 1.39, c),
+			h = exp(mix(mix(.8671, -5.116 - .0866 * max(B - 78., 0.), k), .8755, c));
+		vec3 v = vec3(sin(th) * cos(ph), cos(th), sin(th) * sin(ph)), w = vec3(sin(ph), 0, -cos(ph));
+		float r = .88 - .106 * (ph + .898) * (ph + .898);   // the causeway's crest; over the ridges at its ends: .955
+		ro = C + v * (mix(r, .955, smoothstep(-.67, -.6, ph) + 1. - smoothstep(-1.2, -1.13, ph)) + h) * 5.;
+		ta = mix(C, ro + w - v * .12, f);
+		U = normalize(mix(U, v - cross(w, v) * .25 * sin(B * 1.571), f));
+		Z = min((length(ro - C) * .2 - r) * .5, 1.);   // the scale of the view: the height above the causeway
+		b = -2.26 - .01 * max(B - 78., 0.);
+		L = normalize(mix(vec3(sin(1.284) * cos(ph - .6), cos(1.284), sin(1.284) * sin(ph - .6)), vec3(cos(b), 0, sin(b)), f));
+	} else {   // around the tesseract: from below while it turns, from above while it is sliced
 		b = floor((B - 38.) / 8.);
-		float r = b < 1. ? 13. + (B - 38.) * .6 : 20. - b * 2.;
-		ro = C + vec3(sin(B * .07 + b * 2.) * r, b < 1. ? 2. : b < 2. ? -2. : 8., cos(B * .07 + b * 2.) * r);
+		ro = C + vec3(sin(B * .07 + b * 2.) * (20. - b * 2.), b * 10. - 12., cos(B * .07 + b * 2.) * (20. - b * 2.));
 	}
 }
 
 void main()
 {
 	B = u.x / 1.92;
-	T = B < 34. ? B : B < 63. ? max(34. - (B - 34.) * 16., 3.) : 3. + (B - 63.) * 4.;   // (the grid fades at 64-65)
+	T = B < 34. ? B : B < 63. ? 34. - 31. * smoothstep(34., 36.5, B) : 3. + (B - 63.) * 4.;   // (eased rewind; the grid fades at 64-65)
 	N = clamp((B - 30.) / 5., 0., 1.) - clamp((B - 63.) / 8., 0., .6);   // night; dawn from bar 63
 	I = clamp(floor((B - 64.) * 4.) + 1., 1., 8.);   // the bulb gains an iteration per beat
-	H = B > 70. && B < 78. ? sin((B - 70.) * .3927) * .7 : 0.;
-	Z = exp(-clamp(B - 78., 0., 19.) * .43);   // (until bar 97: deeper, the camera would touch the surface)
+	H = B > 66. && B < 70. ? sin((B - 66.) * .785) * .7 : 0.;
+	Z = 1.;
 	vec2 uv = (2. * gl_FragCoord.xy - u.yz) / u.z;
 	L = normalize(vec3(-.6, .35 - .3 * N, -.5));
-	// the building's frame collapses to a point (bars 36-38); the point grows
+	// the building's frame collapses to a point (bars 36.5-38); the point grows
 	// into a line, square, cube and tesseract (38-46), which turns in 4D and
 	// is sliced (54-62)
-	A = max(vec4(7.5, 9.4, 5.5, 0) * smoothstep(0., 1., (vec4(38, 37.33, 36.67, 0) - B) * 1.5), 3.6 * smoothstep(0., 1., B - vec4(38, 40, 42, 44))
+	A = max(vec4(7.5, 9.4, 5.5, 0) * smoothstep(0., 1., (vec4(38, 37.5, 37, 0) - B) * 2.), 3.6 * smoothstep(0., 1., B - vec4(38, 40, 42, 44))
 		* (1. - smoothstep(62., 63.5, B)));
 	F = smoothstep(0., .5, A);
 	R = mat4(1);
@@ -276,22 +294,23 @@ void main()
 	vec3 w = normalize(ta - ro), x = normalize(cross(w, U)), rd = normalize(uv.x * x + uv.y * cross(x, w) + 1.8 * w);
 	float t = 0., d;
 	Q = -1. / min(rd.y, -1e-6);
+	float tm = min(200., 600. * Z);   // (beyond: only haze)
 	for (int i = 0; i < 128; i++) {
 		d = map(ro + rd * t);
-		if (d < .001 * t || t > 200.)
+		if (d < .001 * t || t > tm)
 			break;
 		t += d;
 	}
 	vec3 col = sky(rd), p = ro + rd * t;
 	Q = 1.;
-	if (t < 200.) {
+	if (t < tm) {
 		float m = M, e = E;
 		vec4 g = G;
 		vec2 h = vec2(.001, -.001) * Z;
 		vec3 n = normalize(h.xyy * map(p + h.xyy) + h.yyx * map(p + h.yyx) + h.yxy * map(p + h.yxy) + h.xxx * map(p + h.xxx));
 		// soft shadow towards the sun
 		float sh = 1., s = .05 * Z;
-		for (int i = 0; i < 24; i++) {
+		for (int i = 0; i < (B < 62. ? 40 : 24); i++) {   // (the building's thin parts need 40 steps)
 			d = map(p + n * .01 * Z + L * s);
 			if (M < 9.)
 				sh = min(sh, 12. * d / s);
@@ -322,6 +341,8 @@ void main()
 			float fr = .04 + .96 * pow(1. - abs(dot(n, rd)), 5.);
 			col = mix(room + alb, sky(reflect(rd, n)), fr) + sun * pow(max(dot(reflect(rd, n), L), 0.), 60.) * sh;
 		}
+		if (m < 1.)
+			col = mix(col, sky(rd), smoothstep(66., 70., B));
 		if (m < 1. && B > 33. && B < 64.)   // the tesseract mirrored in the plaza
 			col += hyper(p, reflect(rd, n), 1e3) * .15;
 		col += vec3(.3, .75, 1) * e * 2.;
@@ -344,5 +365,5 @@ void main()
 		}
 	}
 	col = 1. - exp(-col * 1.4);
-	o = vec4(pow(col, vec3(.4545)) * (1. - .15 * dot(uv, uv)) * clamp((100. - B) / 3., 0., 1.), 1);   // (the end: fade out)
+	o = vec4(pow(col, vec3(.4545)) * (1. - .15 * dot(uv, uv)) * clamp((104. - B) / 3., 0., 1.), 1);   // (the end: fade out)
 }

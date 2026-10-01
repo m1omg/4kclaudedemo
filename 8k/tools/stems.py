@@ -18,18 +18,19 @@ S = os.environ.get('S', '/tmp')
 src = open(sys.argv[1]).read()
 OFF = {
  'kick': ('vec2 m = kick * vec2(sin(330. * tb - 40. * exp(-tb * 30.)))', 'vec2 m = vec2(0)'),
- 'hats': ('float(0x1F8F0F8 >> sec & 1)', '0.'),
- 'clap': ('float(0x1F0E0F0 >> sec & 1)', '0.'),
- 'crash': ('float(0x1F0F0FC >> sec & 1) * hp * exp(-y * 1.2)', '0. * hp * exp(-y * 1.2)'),
- 'roll': ('if (bar == 44 || bar == 45 || bar == 76 || bar == 77)', 'if (false)'),
- 'boom': ('if (bar == 64 || bar == 65)', 'if (false)'),
- 'riser': ('if (bar == 62 || bar == 63)', 'if (false)'),
- 'bass': ('if ((0x1FEFCFC >> sec & 1) > 0', 'if (false && (0x1FEFCFC >> sec & 1) > 0'),
- 'pad': ('for (int q = 0; q < 2; q++)', 'for (int q = 0; q < 0; q++)'),
- 'marimba': ('if (bar > 5 && bar < 30)', 'if (false)'),
- 'falls': ('if (bar == 36 || bar == 37)', 'if (false)'),
- 'arp': ('for (int k = 0; k < 4; k++)', 'for (int k = 0; k < 0; k++)'),
- 'melody': ('for (int k = 0; k < 3; k++)', 'for (int k = 0; k < 0; k++)'),
+ 'snare': ('m += (g * float(sb >> 2 & 1) + h * float(sb >> 2 == 2)) *', 'm += 0. *'),
+ 'hats': ('hp * (g * (sb % 4 == 2', '0. * hp * (g * (sb % 4 == 2'),
+ 'crash': ('float(0x1F8F0FC >> sec & 1) * hp * exp(-y * 1.2) * .2', '0. * hp'),
+ 'toms': ('if (bar % 8 == 5 && sb > 7)', 'if (false)'),
+ 'risers': ('if (bar == 4 || bar == 5 || bar == 44 || bar == 45 || bar == 62 || bar == 63 || bar == 76 || bar == 77)', 'if (false)'),
+ 'whoosh': ('if (y > 0. && y < 1.)\n\t\tm += (n * .6', 'if (false)\n\t\tm += (n * .6'),
+ 'hits': ('if (x > 0. && x < 1.5) {', 'if (false) {'),
+ 'boom': ('if (bar == 64 || bar == 65) {', 'if (false) {'),
+ 'bass': ('if ((0x3FEF9FC >> sec & 1) > 0) {', 'if (false) {'),
+ 'pad': ('for (int q = 0; q < 2; q++) {\n\t\tx = tc', 'for (int q = 0; q < 0; q++) {\n\t\tx = tc'),
+ 'bells': ('if (bar > 5 && bar < 30) {', 'if (false) {'),
+ 'arp': ('for (int k = 0; k < 4; k++) {\n\t\tint s2 = max', 'for (int k = 0; k < 0; k++) {\n\t\tint s2 = max'),
+ 'lead': ('for (int k = 0; k < 3; k++) {\n\t\tint s2 = st - 3 * k, b2', 'for (int k = 0; k < 0; k++) {\n\t\tint s2 = st - 3 * k, b2'),
 }
 def lin(s):
     i = s.index('return tanh(')
@@ -40,12 +41,12 @@ def render(s, name):
     os.makedirs(os.path.join(S, 'stems'), exist_ok=True)
     fn = os.path.join(S, 'stems', name + '.frag'); open(fn, 'w').write(s)
     wav = os.path.join(S, 'stems', name + '.wav')
-    subprocess.run([S + '/preview', 'music', fn, wav, '193'], check=True, env=dict(os.environ, DISPLAY=os.environ.get('DISPLAY', ':99')), stderr=subprocess.DEVNULL)
+    subprocess.run([S + '/preview', 'music', fn, wav, '200'], check=True, env=dict(os.environ, DISPLAY=os.environ.get('DISPLAY', ':99')), stderr=subprocess.DEVNULL)
     d = open(wav, 'rb').read()
     return np.frombuffer(d[44:], dtype=np.float32).reshape(-1, 2).astype(np.float64)
 full = render(lin(src), 'full')
 bar = 84672
-secs = [(0, 6), (6, 14), (14, 30), (30, 34), (34, 36), (36, 38), (38, 46), (46, 54), (54, 62), (62, 64), (64, 66), (66, 70), (70, 78), (78, 86), (86, 98), (98, 100)]
+secs = [(0, 6), (6, 14), (14, 22), (22, 30), (30, 34), (34, 37), (37, 38), (38, 46), (46, 54), (54, 62), (62, 64), (64, 66), (66, 70), (70, 78), (78, 86), (86, 94), (94, 98), (98, 104)]
 def aw(x):
     # crude A-weighting via FFT per section
     X = np.fft.rfft(x)
@@ -69,10 +70,9 @@ for nm in names:
     st = full - render(lin(src.replace(a, b, 1)), nm)
     np.save(os.path.join(S, 'stems', nm + '.npy'), st.astype(np.float32))
     row(nm, st)
-    if nm in ('hats', 'clap', 'crash', 'roll', 'riser', 'boom'):
+    if nm in ('kick', 'snare', 'hats', 'crash', 'toms', 'risers', 'whoosh', 'hits', 'boom'):
         continue
     m = st.mean(1).copy()
-    m[34 * bar:36 * bar] = 0   # (the rewind)
     d2 = np.abs(np.diff(m, 2))
     lvl = np.convolve(np.abs(m), np.ones(441) / 441, 'same')[1:-1]
     bad = np.where(d2 > 0.02 + lvl * 0.5)[0]
