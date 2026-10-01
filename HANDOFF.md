@@ -22,9 +22,9 @@ Intel macOS. Everything is computed at runtime:
 
 | Platform | File | Size | Status |
 |---|---|---|---|
-| Windows | `dist/brana-windows.exe` | 3424 B | Works under Wine: 9.0 with Mesa llvmpipe; 11.18 with the NVIDIA driver; 11.18 with llvmpipe posing as an OpenGL 3.3 GPU (PR #10). **Never run on real Windows.** |
-| Linux | `dist/brana-linux` | 4020 B | **Works on the owner's NVIDIA RTX 3060 PC:** the owner heard the music (PR #6). Also works on Mesa llvmpipe. |
-| macOS (Intel) | `dist/brana-macos` | 4091 B | **Confirmed on the owner's MacBook:** music plays and visuals render correctly (build before PR #4). **Only a few fps on its Intel HD Graphics** (open issue). PR #4 optimizations are untested there. |
+| Windows | `dist/brana-windows.exe` | 3680 B | Works under Wine: 9.0 with Mesa llvmpipe; 11.18 with the NVIDIA driver; 11.18 with llvmpipe posing as an OpenGL 3.3 GPU (PR #10). **Never run on real Windows.** |
+| Linux | `dist/brana-linux` | 4090 B | **Works on the owner's NVIDIA RTX 3060 PC:** the owner heard the music (PR #6). Also works on Mesa llvmpipe. |
+| macOS (Intel) | `dist/brana-macos` | 4048 B | **Confirmed on the owner's MacBook:** music plays and visuals render correctly (build before PR #4). **Only a few fps on its Intel HD Graphics** (open issue). PR #4 optimizations are untested there. |
 
 Open issue: **macOS on Intel HD Graphics runs at a few fps** (section 3).
 PR #4 made the worst scenes about 2.6× cheaper, but that is not yet tested on
@@ -270,16 +270,18 @@ Steps (each one a PR):
    Variants and their packed size:
    | variant | change | size |
    |---|---|---|
-   | `base` | the release build | 4091 |
-   | `noexp` | `ld64.lld -no_exported_symbols` | 4028 |
-   | `notrail` | + tar without end-of-archive blocks | 4010 |
-   | `nodic` | + no `LC_DATA_IN_CODE`, no `__got`/`__bss` headers | 3977 |
-   | `nosym` | + zeroed symbol tables | 3951 |
-   | `notext` | + no `__text` header | 3921 |
-   | `loc0` | base, uniform location 0 | 4067 |
-   | `short` | base, short framework paths | 4082 |
-   | `hdr1` | base, `tail -n+3 "$0"\|tar -xf - -C/tmp;exec /tmp/a` | 4089 |
-   | `hdr2` | base, `tail -n+3 "$0"\|tar x -C/tmp;/tmp/a` | 4080 |
+   | `base` | the release build | 4048 |
+   | `noexp` | `ld64.lld -no_exported_symbols` | 3988 |
+   | `notrail` | + tar without end-of-archive blocks | 3969 |
+   | `nodic` | + no `LC_DATA_IN_CODE`, no `__got`/`__bss` headers | 3937 |
+   | `nosym` | + zeroed symbol tables | 3910 |
+   | `notext` | + no `__text` header | 3883 |
+   | `loc0` | base, uniform location 0 | 4026 |
+   | `short` | base, short framework paths | 4040 |
+   | `hdr1` | base, `tail -n+3 "$0"\|tar -xf - -C/tmp;exec /tmp/a` | 4046 |
+   | `hdr2` | base, `tail -n+3 "$0"\|tar x -C/tmp;/tmp/a` | 4037 |
+   | `scale` | base + automatic resolution (`-DSCALE`) | 4262 |
+   | `all` | every saving + `loc0` + `short` + `hdr2` + `-DSCALE`: the candidate release | 4044 |
 
    The first six are cumulative. The Mach-O edits are done by
    `tools/mac/machopp.py`, one option per change.
@@ -306,10 +308,52 @@ Steps (each one a PR):
    - `-msse2` is still to come with the scaling (float-to-int without the CRT).
    - Mesa has `glCreateShaderProgramv` on every driver, so Linux does not need
      this.
-5. Linux bytes: `glBindFramebufferEXT` with FBO name 1 (−14); a shared `frame`
-   routine that also fixes a hidden start-up frame with an unset uniform (NaN
-   rays, 120 steps per pixel); a minifier naming search; ELF header overlaps.
-6. The scaling:
+5. **Done (PR #11), Linux bytes:**
+   - `glBindFramebufferEXT` with FBO name 1 (no `glGenFramebuffers`);
+   - a shared `frame` routine, which also removed a hidden start-up frame with
+     an unset uniform (NaN rays, 120 steps per pixel);
+   - `clock_gettime` as a system call (one name less);
+   - `tools/names.json` from `tools/namesearch.py` (−36 B Linux, −37 B macOS
+     with the old code);
+   - the stub is 4 B shorter (236 B);
+   - a wider `xzbest.sh` grid.
+6. The scaling. **Linux and Windows done (PR #11).** macOS is written
+   (`src/mac/main.asm` with `-DSCALE`, off in the release) and passes in
+   `tools/macsim`, but it needs the container savings of step 2 (about
+   4267 B without them) and a run on the real Mac; `tools/mac/test.sh` has
+   variants with it.
+   - Values: `KMIN` 11, `LIMIT` about 36 ms per frame, `T_HEAVY` 88 s (the
+     core, the heaviest moment of the current shader on NVIDIA and llvmpipe).
+     **Revisit `T_HEAVY` when step 3 makes the core cheaper** (e.g. the
+     bounding sphere): the test must time the heaviest moment.
+   - The music texture is allocated at max(1024, window width) × 3144 RGBA32F,
+     so it doubles as the render target without a second `glTexImage2D`
+     (129 MB at 2560 wide). If a GPU cannot filter RGBA32F in the blit, use a
+     separate RGBA8 texture (about +13 B packed).
+   - Linux results: RTX 3060 → k = 16, and a frame through the real path is
+     bit-identical to `preview`; llvmpipe → k = 11, the upscaled frame matches
+     a 1760x990 reference upscaled by PIL within 0.22 levels on average.
+   - Test hooks:
+     - `src/linux/main.asm`: `-DSHOWK` prints `k=NN` to stderr; `-DSNAP`
+       writes the frame at t = 26 to `snap.rgb` (RGB, bottom-up, window size)
+       after 2 s and quits.
+     - `src/win/main.c` `-DSNAP`: the same, plus `snap.k` (k as a 32-bit
+       integer); `kernel32.def` lists `CreateFileA`/`WriteFile` for it
+       (unused imports cost nothing in the release).
+     - `tools/macsim`: `MACSIM_SNAP=file` (with `MACSIM_START=3` for the
+       scaling version: two `glutGet(GLUT_ELAPSED_TIME)` calls of the speed
+       test come first) makes the 2 s-later frame t = 26 s exactly (the Mac
+       code computes 26000 * 0.001f = 26.0000019) and writes it; the fake
+       `glBlitFramebuffer` prints the first render size.
+   - Windows results under Wine 11.18: NVIDIA → k = 16, frame bit-identical;
+     llvmpipe → k = 11, upscaled within 0.22 levels; the release exe plays
+     bit-exact music.
+   - macOS code in macsim: NVIDIA → k = 16 (no blit), frame bit-identical to a
+     `preview -core` render at t = 26.0000019; llvmpipe → render size
+     1760x990, upscaled within 0.22 levels.
+   - Windows: `QueryPerformanceCounter` for the speed test (`timeGetTime`
+     can tick in 15.6 ms steps); the k loop is in `double` (no CRT helpers
+     like `__allmul`/`__ftol2` are linked).
    - Right after the music, time 2 frames of the heaviest moment offscreen
      at half size, with `glFinish` (after one warm-up frame). This does not
      depend on vsync.
@@ -407,7 +451,8 @@ Also requested:
 | `src/mac/main.asm`, `src/mac/tbd/libSystem.tbd` | macOS layer and the stub `.tbd` used instead of the Apple SDK. |
 | `src/win/main.c`, `src/win/lib/*.def/.lib` | Windows layer and import libraries (`llvm-dlltool -m i386 -k -d x.def -l x.lib`). |
 | `build.sh` | Builds everything into `dist/` and checks 4096 B. Runs `tools/check_shaders.sh` if `$S/preview` exists. |
-| `tools/minify.py` | GLSL minifier. Writes `src/shaders.h` (C), `src/shaders.inc` (nasm) and `src/shaders.h.*.min` (all git-ignored). |
+| `tools/minify.py` | GLSL minifier. Writes `src/shaders.h` (C), `src/shaders.inc` (nasm) and `src/shaders.h.*.min` (all git-ignored). Uses the short names fixed in `tools/names.json`. |
+| `tools/namesearch.py`, `tools/names.json` | Hill-climbing search for the identifier names that pack smallest (Linux payload); run it again after shader changes (new identifiers get default names). Several seeds in parallel: `tools/namesearch.py 600 SEED out.json`. |
 | `tools/check_shaders.sh` | Minified shaders must give **bit-identical** audio and frames (compat), and compile in a 3.3 core context (macOS path). Uses the default GL driver, so on the NVIDIA PC it is also the NVIDIA compile check; prints the driver's log on failure. |
 | `tools/build_win.sh`, `build_linux.sh`, `build_mac.sh`, `xzbest.sh` | Per-platform builds. `xzbest.sh` grid-searches LZMA encoder parameters. |
 | `tools/preview.c` | Dev harness: renders the music to a WAV and frames to PPM or a raw stream, through the same GL paths (compat or `-core`). |
@@ -494,7 +539,7 @@ The bar is `B = time / 2`.
 
 ### 5.5 Linux layer (`src/linux/main.asm`, `stub.asm`)
 
-- **Stub** (240 B): opens `/proc/self/exe` and seeks to the payload, then
+- **Stub** (236 B): opens `/proc/self/exe` and seeks to the payload, then
   `memfd_create`.
   - The child runs `/usr/bin/xzcat` with stdin = the payload and stdout = the
     memfd.
@@ -504,7 +549,8 @@ The bar is `B = time / 2`.
 - **ELF:** own header and dynamic section. It imports only `dlopen` and
   `dlsym` from `libdl.so.2`, with no symbol versions, so it works on old and
   new glibc. It loads `libX11.so.6`, `libGL.so.1` and `libasound.so.2`;
-  `pthread_create` and `clock_gettime` come through the libasound handle.
+  `pthread_create` comes through the libasound handle; `clock_gettime` is a
+  system call.
 - **Order of calls** (no error checks):
   1. `XOpenDisplay`, `glXChooseVisual({GLX_RGBA, GLX_DOUBLEBUFFER})`,
      colormap, blank pixmap cursor, `XCreateWindow` (screen size),
@@ -513,28 +559,40 @@ The bar is `B = time / 2`.
      yet.**
   2. **Music:**
      - `glBindTexture(GL_TEXTURE_2D, 1)` (the name is not generated);
-     - `glTexImage2D(RGBA32F, 1024, 3144)`;
-     - `glGenFramebuffers`, bind, `glFramebufferTexture2D`;
+     - `glTexImage2D(RGBA32F, max(1024, window width), 3144)`;
+     - `glBindFramebufferEXT(GL_FRAMEBUFFER, 1)` (the EXT call creates object
+       1), `glFramebufferTexture2D`;
      - `glViewport(1024, 3144)`;
      - `glCreateShaderProgramv(GL_FRAGMENT_SHADER)` (a fragment-only
        separable program, fixed-function vertex stage), `glUseProgram`,
        `glRects(-1,-1,1,1)`;
      - `glReadPixels(RGBA, FLOAT)` into a 51.5 MB `.bss` buffer.
-  3. Bind FBO 0, set the screen viewport, compile the visual program, one
-     draw, `XMapWindow`.
+  3. **Speed test** (the framebuffer object stays bound):
+     - k = 8 (half size);
+     - compile the visual program (`program` falls into `frame`: a warm-up
+       frame);
+     - `glFinish`, time 2 frames of t = 88 with `glFinish`;
+     - k = the largest in [KMIN..16] with k²·(ns >> 16) <= LIMIT;
+     - r13 = (k < 16): the draw framebuffer of `frame`.
+     - Then `XMapWindow`.
   4. **Audio:**
      - `snd_pcm_open("default")`;
      - `snd_pcm_set_params(FLOAT_LE, RW_INTERLEAVED, 2 ch, 44100,
        soft_resample 1, 100 ms)`;
      - `pthread_create` → **one** `snd_pcm_writei` of the whole song.
   5. **Loop:**
-     - events: any key quits (`exit_group`); `ConfigureNotify` → resize and
-       viewport;
-     - time = `CLOCK_MONOTONIC` since the audio start;
-     - `glUniform4fv` (location 0), `glRects`, `glXSwapBuffers`;
+     - events: any key quits (`exit_group`); `ConfigureNotify` → `resize`
+       (which falls into `rescale`: render size, `u.yz`, viewport);
+     - time = `CLOCK_MONOTONIC` since the audio start (in rbp);
+     - `frame` (bind draw framebuffer r13, `glUniform4fv` location 0,
+       `glRects`), bind draw framebuffer 0,
+       `glBlitFramebuffer(render size → window, mask r13 << 14, LINEAR)`
+       (mask 0 = nothing at full size), `glXSwapBuffers`;
      - ends when time > song length.
-- **Test hooks:** `-DDEVICE='"name"'` (ALSA device) and `-DDEBUG` (`int3`
-  after `glReadPixels`).
+   - Registers kept across the loop: rbx function table, r12 display, r13
+     scaled flag, r14 window, r15 k, rbp start time.
+- **Test hooks:** `-DDEVICE='"name"'` (ALSA device), `-DDEBUG` (`int3`
+  after `glReadPixels`), `-DSHOWK` and `-DSNAP` (section 3.4, step 6).
 
 ### 5.6 macOS layer (`src/mac/main.asm`)
 
@@ -578,9 +636,9 @@ The bar is `B = time / 2`.
 
 | Platform | Size | Left |
 |---|---|---|
-| Windows | 3424 B | 672 |
-| Linux | 4020 B | 76 |
-| macOS | 4091 B | **5** |
+| Windows | 3680 B | 416 |
+| Linux | 4090 B | 6 |
+| macOS | 4048 B | **48** |
 
 - The Windows size depends on the compiler: the pre-PR #6 sources give
   3183 B with Ubuntu's clang 18 (the cloud builds) and 3236 B with clang
@@ -645,6 +703,7 @@ $S/preview frame src/visual.frag 26 1280 720 f.ppm            # one frame at t =
 python3 tools/bench.py src/visual.frag                        # GPU cost per scene
 python3 tools/flicker.py src/visual.frag                      # flicker metric
 python3 tools/inside.py src/visual.frag                       # rays ending inside a solid (must stay 0)
+tools/namesearch.py 600                                       # after shader changes: re-optimize tools/names.json (10 min)
 python3 tools/audiocmp.py ref.wav recording.wav               # recording vs reference
 gcc -O2 -o tools/brana-diag tools/diag.c -ldl -lm             # after minify.py; rebuild it whenever music.frag changes
 ```
@@ -704,6 +763,7 @@ ALSA_CONFIG_PATH=$S/asound_file.conf timeout 8 ./dist/brana-linux
 | #8 | `tools/mac/macbench`: shader timings on the Mac's GPU (section 3.4). |
 | #9 | `tools/mac/test.sh` + variants: which macOS byte savings a real Mac accepts. macsim without root. |
 | #10 | Windows: OpenGL 3.3 (classic program calls), music in 16 bands, Optimus/PowerXpress exports. |
+| #11 | Linux and Windows: automatic render resolution (k/16 of the window, at least 11/16) for weak GPUs. `tools/names.json` + `tools/namesearch.py` (shorter packed shaders on every platform), stub −4 B, wider `xzbest.sh` grid, macsim snapshot hooks. |
 
 ---
 

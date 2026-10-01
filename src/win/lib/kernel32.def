@@ -2,3 +2,7 @@ LIBRARY kernel32.dll
 EXPORTS
 ExitProcess@4
 LoadLibraryA@4
+QueryPerformanceCounter@4
+QueryPerformanceFrequency@4
+CreateFileA@28
+WriteFile@20

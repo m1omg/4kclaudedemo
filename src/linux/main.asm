@@ -35,15 +35,15 @@ F glRects
 F glViewport
 F glBindTexture
 F glTexImage2D
-F glGenFramebuffers
-F glBindFramebuffer
+F glBindFramebufferEXT
 F glFramebufferTexture2D
 F glReadPixels
+F glBlitFramebuffer
+F glFinish
 F snd_pcm_open
 F snd_pcm_set_params
 F snd_pcm_writei
 F pthread_create
-F clock_gettime
 
 ehdr:
 	db 0x7f, "ELF", 2, 1, 1, 0
@@ -217,6 +217,8 @@ _start:
 	mov rsi, r14
 	mov rdx, rax
 	call [rbx + glXMakeCurrent]
+	push 1                      ; r13: the draw framebuffer of frame: object 1
+	pop r13                     ; (music, speed test), later 0 if not scaled
 
 	; the whole song in one pass into a 1024 x ROWS RGBA32F texture,
 	; every texel holds two consecutive stereo samples
@@ -231,18 +233,17 @@ _start:
 	mov edi, 0x0DE1
 	xor esi, esi
 	mov edx, 0x8814             ; GL_RGBA32F
-	mov ecx, 1024
+	mov ecx, 1024               ; width: max(1024, window width), as the
+	cmp ecx, [size]             ; render target of reduced resolutions too
+	cmovb ecx, [size]
 	mov r8d, ROWS
 	xor r9d, r9d
 	call [rbx + glTexImage2D]
 	add rsp, 32
+	mov edi, 0x8D40             ; GL_FRAMEBUFFER: object 1 (the EXT call creates it)
 	push 1
-	pop rdi
-	lea rsi, [fbo]
-	call [rbx + glGenFramebuffers]
-	mov edi, 0x8D40
-	mov esi, [fbo]
-	call [rbx + glBindFramebuffer]
+	pop rsi
+	call [rbx + glBindFramebufferEXT]
 	mov edi, 0x8D40
 	mov esi, 0x8CE0
 	mov edx, 0x0DE1
@@ -270,14 +271,54 @@ _start:
 %endif
 	pop rax
 	pop rax
-	mov edi, 0x8D40
-	xor esi, esi
-	call [rbx + glBindFramebuffer]
-	mov edx, [size]
-	mov ecx, [size + 4]
-	call viewport
+	; the GPU's speed: 2 frames of the heaviest moment at half size, offscreen
+	; (no vsync), timed after a warm-up frame that also compiles the shader
+	push 8                      ; r15 = k: the render size is k/16 of the window
+	pop r15
+	call rescale
 	lea rax, [visual_frag]
-	call program
+	call program                ; (draws the warm-up frame)
+	mov dword [uni], T_HEAVY
+	call [rbx + glFinish]
+	call now
+	xchg rax, rbp
+	call frame
+	call frame
+	call [rbx + glFinish]
+	call now
+	sub rax, rbp
+	shr rax, 16                 ; ~65.5 us units
+	; the largest k whose estimated frame time fits, never below KMIN
+	push 16
+	pop r15
+.k:
+	mov edx, r15d
+	imul edx, edx
+	imul edx, eax               ; (fits in 32 bits even for a very slow GPU)
+	cmp edx, LIMIT
+	jbe .kset
+	dec r15d
+	cmp r15d, KMIN
+	ja .k
+.kset:
+	cmp r15d, 16
+	setb r13b                   ; r13 = 1: render into framebuffer object 1 and upscale
+	call rescale
+%ifdef SHOWK                    ; (testing: print k to stderr)
+	mov eax, r15d
+	mov cl, 10
+	div cl
+	add ax, "00"
+	mov [kmsg + 2], ax
+	push 1                      ; write(2, kmsg, 5)
+	pop rax
+	push 2
+	pop rdi
+	lea rsi, [kmsg]
+	push 5
+	pop rdx
+	syscall
+%endif
 	mov rdi, r12
 	mov rsi, r14
 	call [rbx + XMapWindow]
@@ -307,8 +348,8 @@ _start:
 	lea rdx, [writer]
 	xor ecx, ecx
 	call [rbx + pthread_create]
-	lea rsi, [t0]
 	call now
+	xchg rax, rbp               ; rbp = start of the music
 
 .frame:
 	mov rdi, r12
@@ -326,24 +367,53 @@ _start:
 	mov edx, [event + 56]
 	mov ecx, [event + 60]
 	call resize
-	call viewport
 	jmp .frame
 .draw:
-	lea rsi, [tn]
 	call now
-	mov rax, [tn]
-	sub rax, [t0]
+	sub rax, rbp
 	cvtsi2ss xmm0, rax
 	mulss xmm0, [nsec]
 	movss [uni], xmm0
 	comiss xmm0, [song_len]
 	ja quit
+%ifdef SNAP                     ; (testing: after 2 s, write the frame at t = 26
+	comiss xmm0, [snap_after]   ; to snap.rgb and quit)
+	jb .nosnap
+	mov dword [uni], __float32__(26.0)
+	call frame
+	call blit
+	mov edi, 0x8CA8             ; GL_READ_FRAMEBUFFER: the window
+	xor esi, esi
+	call [rbx + glBindFramebufferEXT]
+	lea rax, [song]
+	push rax
+	push rax
 	xor edi, edi
-	push 1
-	pop rsi
-	lea rdx, [uni]
-	call [rbx + glUniform4fv]
-	call rects
+	xor esi, esi
+	mov edx, [size]
+	mov ecx, [size + 4]
+	mov r8d, 0x1907             ; GL_RGB
+	mov r9d, 0x1401             ; GL_UNSIGNED_BYTE
+	call [rbx + glReadPixels]
+	pop rax
+	pop rax
+	mov eax, 2                  ; open("snap.rgb", O_WRONLY | O_CREAT | O_TRUNC, 0644)
+	lea rdi, [snapname]
+	mov esi, 0x241
+	mov edx, 420
+	syscall
+	mov edi, eax
+	lea rsi, [song]
+	mov eax, [size]
+	imul eax, [size + 4]
+	imul edx, eax, 3
+	mov eax, 1                  ; write
+	syscall
+	jmp quit
+.nosnap:
+%endif
+	call frame
+	call blit
 	mov rdi, r12
 	mov rsi, r14
 	call [rbx + glXSwapBuffers]
@@ -355,16 +425,29 @@ quit:
 	xor edi, edi
 	syscall
 
-; resize(edx = width, ecx = height): remember the size, update the uniform
+; scaled: edx, ecx = the render size, window size * k / 16
+scaled:
+	mov edx, [size]
+	imul edx, r15d
+	shr edx, 4
+	mov ecx, [size + 4]
+	imul ecx, r15d
+	shr ecx, 4
+	ret
+
+; resize(edx = width, ecx = height): remember the window size, then rescale.
+; (Also called once before the GL context exists: k = 0 then, and GL calls
+; without a context do nothing.)
 resize:
 	mov [size], edx
 	mov [size + 4], ecx
+; rescale: the render size -> the uniform u.yz and the viewport
+rescale:
+	call scaled
 	cvtsi2ss xmm0, edx
 	movss [uni + 4], xmm0
 	cvtsi2ss xmm0, ecx
 	movss [uni + 8], xmm0
-	ret
-
 ; viewport(edx = width, ecx = height)
 viewport:
 	xor edi, edi
@@ -382,6 +465,20 @@ program:
 	mov edi, eax
 	call [rbx + glUseProgram]
 	pop rax
+; frame: draw into framebuffer r13 (1, or 0 = the window): upload the uniform
+; u (location 0), draw the full-screen rectangle (after program: the music
+; program has no u, which just raises a GL error)
+frame:
+	push rax                    ; (alignment)
+	mov edi, 0x8CA9             ; GL_DRAW_FRAMEBUFFER
+	mov esi, r13d
+	call [rbx + glBindFramebufferEXT]
+	xor edi, edi
+	push 1
+	pop rsi
+	lea rdx, [uni]
+	call [rbx + glUniform4fv]
+	pop rax
 rects:
 	push -1
 	pop rdi
@@ -391,16 +488,38 @@ rects:
 	mov ecx, edx
 	jmp [rbx + glRects]
 
-; now(rsi = &timespec): nanoseconds since some start point -> [rsi]
+; blit: upscale the image rendered into framebuffer object 1 to the window.
+; Not scaled (r13 = 0): the frame went straight to the window and the mask is
+; 0, nothing is copied (also fine with driver-forced antialiasing).
+blit:
+	push rax                    ; (alignment)
+	mov edi, 0x8CA9             ; GL_DRAW_FRAMEBUFFER: the window
+	xor esi, esi
+	call [rbx + glBindFramebufferEXT]
+	push 0x2601                 ; GL_LINEAR
+	mov eax, r13d
+	shl eax, 14                 ; GL_COLOR_BUFFER_BIT or 0
+	push rax
+	push qword [size + 4]       ; (only the low 32 bits are read)
+	push qword [size]
+	call scaled
+	xor edi, edi
+	xor esi, esi
+	xor r8d, r8d
+	xor r9d, r9d
+	call [rbx + glBlitFramebuffer]
+	add rsp, 40
+	ret
+
+; now: rax = monotonic time in ns (the clock_gettime system call)
 now:
-	push rsi
 	push 1                      ; CLOCK_MONOTONIC
 	pop rdi
-	call [rbx + clock_gettime]
-	pop rsi
+	lea rsi, [tn]
+	mov eax, 228                ; clock_gettime
+	syscall
 	imul rax, [rsi], 1000000000
 	add rax, [rsi + 8]
-	mov [rsi], rax
 	ret
 
 ; audio thread: one blocking write of the whole song
@@ -413,6 +532,11 @@ writer:
 
 %include "shaders.inc"          ; music_frag, visual_frag, SONG_SAMPLES
 ROWS    equ SONG_SAMPLES / 2048 + 1
+%ifndef KMIN
+KMIN    equ 11                  ; the render size never goes below 11/16 of the window
+%endif
+LIMIT   equ 70312               ; k*k*(2 frames at k = 8, ns >> 16): about 36 ms per frame
+T_HEAVY equ __float32__(88.0)   ; the moment the speed is measured at (s)
 
 attr:   dd 4, 5, 0              ; GLX_RGBA, GLX_DOUBLEBUFFER
 nsec:   dd 1.0e-9
@@ -424,6 +548,13 @@ device: db "default", 0
 %endif
 fs_name: db "_NET_WM_STATE_FULLSCREEN", 0
 state_name: db "_NET_WM_STATE", 0
+%ifdef SHOWK
+kmsg:   db "k=..", 10
+%endif
+%ifdef SNAP
+snap_after: dd 2.0
+snapname: db "snap.rgb", 0
+%endif
 names:
 	db "libX11.so.6", 0
 	db "XOpenDisplay", 0, "XCreateColormap", 0, "XCreateWindow", 0, "XInternAtom", 0, "XChangeProperty", 0
@@ -431,11 +562,10 @@ names:
 	db "libGL.so.1", 0
 	db "glXChooseVisual", 0, "glXCreateContext", 0, "glXMakeCurrent", 0, "glXSwapBuffers", 0
 	db "glCreateShaderProgramv", 0, "glUseProgram", 0, "glUniform4fv", 0, "glRects", 0, "glViewport", 0
-	db "glBindTexture", 0, "glTexImage2D", 0, "glGenFramebuffers", 0, "glBindFramebuffer", 0
-	db "glFramebufferTexture2D", 0, "glReadPixels", 0, 0
+	db "glBindTexture", 0, "glTexImage2D", 0, "glBindFramebufferEXT", 0
+	db "glFramebufferTexture2D", 0, "glReadPixels", 0, "glBlitFramebuffer", 0, "glFinish", 0, 0
 	db "libasound.so.2", 0
-	db "snd_pcm_open", 0, "snd_pcm_set_params", 0, "snd_pcm_writei", 0, "pthread_create", 0
-	db "clock_gettime", 0, 0
+	db "snd_pcm_open", 0, "snd_pcm_set_params", 0, "snd_pcm_writei", 0, "pthread_create", 0, 0
 zero:   db 0                    ; also terminates the name table
 
 file_end:
@@ -445,14 +575,12 @@ alignb 16
 fn:     resq 32
 swa:    resb 112                ; XSetWindowAttributes
 event:  resb 192                ; XEvent
-t0:     resq 2
 tn:     resq 2
 pcm:    resq 1
 thread: resq 1
 atom:   resq 1
 uni:    resd 4
 size:   resd 2
-fbo:    resd 1
 alignb 16
 song:   resb ROWS * 1024 * 16
 bss_end:

@@ -37,13 +37,13 @@ _start:
 	syscall
 	xchg eax, ebx                   ; ebx = fd
 	mov edi, ebx
-	mov esi, file_end - ehdr
+	mov sil, file_end - ehdr       ; (rsi is still 0)
 	mov al, 8                       ; lseek(fd, payload, SEEK_SET)
 	syscall
 	push rsp                        ; any string will do as the memfd name
 	pop rdi
 	xor esi, esi
-	mov eax, 319                    ; memfd_create
+	mov ax, 319                     ; memfd_create (eax = 240 from lseek)
 	syscall
 	xchg eax, ebp                   ; ebp = memfd
 	mov al, 57                      ; fork
@@ -74,7 +74,7 @@ _start:
 	lea r10, [rdx + rax * 8 + 8]    ; envp
 	lea rsi, [r10 - 8]              ; "" (the NULL ending argv)
 	bts r8d, 12                     ; AT_EMPTY_PATH
-	mov eax, 322                    ; execveat
+	mov ax, 322                     ; execveat (eax = argc)
 	syscall
 
 self:   db "/proc/self/exe", 0

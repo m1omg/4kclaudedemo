@@ -7,11 +7,19 @@ scope aware: every function's parameters and locals reuse the same pool of
 short names (only globals are unique). Writes shaders.h (C) and shaders.inc
 (nasm) with the minified sources.
 
+tools/names.json (made by tools/namesearch.py) can fix the short name of any
+identifier, per shader and scope; LZMA packs some namings better than
+others. Identifiers it does not list get the default names.
+
     minify.py music.frag visual.frag -o shaders.h
 """
 import itertools
+import json
+import os
 import re
 import sys
+
+NAMES = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'names.json')
 
 TYPES = set('float int uint void bool vec2 vec3 vec4 ivec2 ivec3 ivec4 uvec2 uvec3 uvec4 bvec2 bvec3 bvec4 '
             'mat2 mat3 mat4 sampler2D'.split())
@@ -148,40 +156,76 @@ def name_pool():
             yield ''.join(t)
 
 
-def minify_one(src):
+def groups(src):
+    """Identifier groups of a shader: {scope: [identifiers, most frequent first]}
+    (scope '' = globals, otherwise the function name), plus the tokens."""
     toks = tokenize(strip_comments(src))
     scope_of, decls = analyze(toks)
-    local, glob, refs = {}, {}, []
+    count, refs = {}, []
     for i, (k, v) in enumerate(toks):
         if k != 'id' or v in KEYWORDS or v in KEEP or is_member(toks, i):
             continue
         f = scope_of[i]
         key = (f, v) if f is not None and (f, v) in decls else (None, v)
-        d = local if key[0] is not None else glob
-        d[key] = d.get(key, 0) + 1
+        count[key] = count.get(key, 0) + 1
         refs.append((i, key))
-    mapping = {}
+    out = {}
+    for key in sorted(count, key=lambda x: (-count[x], x[1])):
+        out.setdefault(key[0] or '', []).append(key[1])
+    return out, toks, refs
+
+
+def load_names(name):
+    """The part of tools/names.json for a shader file name ({} if none)."""
+    if name and os.path.exists(NAMES):
+        return json.load(open(NAMES)).get(os.path.basename(name), {})
+    return {}
+
+
+def assign(src, table):
+    """Short names for all identifiers: {scope: {identifier: short name}}.
+    table: fixed names ({scope: {identifier: short name}}), used where valid."""
+    grp, toks, refs = groups(src)
     reserved = KEYWORDS | KEEP
-    gen = name_pool()
+    mapping = {}
     used_global = set()
-    for key in sorted(glob, key=lambda x: (-glob[x], x[1])):
-        n = next(gen)
-        while n in reserved:
-            n = next(gen)
-        mapping[key] = n
-        used_global.add(n)
-    funcs = {}
-    for key in local:
-        funcs.setdefault(key[0], []).append(key)
-    for f, keys in funcs.items():
+    for scope in [''] + [f for f in grp if f]:
+        fixed = table.get(scope, {})
+        used = set(used_global) if scope else set()
+        wanted = {v: n for v, n in fixed.items() if v in grp.get(scope, []) and n not in reserved}
+        taken = set()
+        for v in grp.get(scope, []):   # table names first (if still free)
+            n = wanted.get(v)
+            if n and n not in used and n not in taken:
+                mapping[(scope or None, v)] = n
+                taken.add(n)
         gen = name_pool()
-        for key in sorted(keys, key=lambda x: (-local[x], x[1])):
+        for v in grp.get(scope, []):
+            if (scope or None, v) in mapping:
+                continue
             n = next(gen)
-            while n in reserved or n in used_global:
+            while n in reserved or n in used or n in taken:
                 n = next(gen)
-            mapping[key] = n
-    for i, key in refs:
-        toks[i][1] = mapping[key]
+            mapping[(scope or None, v)] = n
+            taken.add(n)
+        if not scope:
+            used_global = taken
+    names = {}
+    for (scope, v), n in mapping.items():
+        names.setdefault(scope or '', {})[v] = n
+    return names, toks, refs
+
+
+def minify_one(src, name=None, table=None):
+    """name: the shader's file name, to look up its part of tools/names.json;
+    table: that part directly ({scope: {identifier: short name}})."""
+    names, toks, refs = assign(src, load_names(name) if table is None else table)
+    for i, (scope, v) in refs:
+        toks[i][1] = names[scope or ''][v]
+    return render(toks)
+
+
+def render(toks):
     out, prev, pk = '', None, None
     for k, v in toks:
         if k == 'num':
@@ -220,7 +264,7 @@ if __name__ == '__main__':
         i = args.index('-o')
         out = args[i + 1]
         del args[i:i + 2]
-    mins = [minify_one(open(a).read()) for a in args]
+    mins = [minify_one(open(a).read(), a) for a in args]
     samples = 73 * 88200
     names = [re.sub(r'\W', '_', a.split('/')[-1]) for a in args]
     with open(out, 'w') as f:
