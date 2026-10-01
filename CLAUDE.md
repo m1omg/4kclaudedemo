@@ -6,7 +6,7 @@ measurements. The Linux + NVIDIA tone is fixed (PR #6, HANDOFF section 2).
 
 Hard rules:
 - Every file in `dist/` must stay <= 4096 bytes (`./build.sh` checks it).
-  Margins now: Windows 672 B, Linux 76 B, macOS 5 B.
+  Margins now: Windows 416 B, Linux 6 B, macOS 48 B.
 - After every finished change: commit, push, open a PR into `main` and merge
   it yourself (the owner asked for this). Continue from the updated `main`.
 - Keep `README.md` (Slovak) in sync with sizes and what was tested.

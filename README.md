@@ -11,9 +11,9 @@ a na konci sa vráti na horizont, kde sa všetko pomaly ponorí späť do tmy.
 
 | Súbor | Platforma | Veľkosť |
 |---|---|---|
-| [`dist/brana-windows.exe`](dist/brana-windows.exe) | Windows (32-bit exe, beží aj na 64-bit) | 3424 B |
-| [`dist/brana-linux`](dist/brana-linux) | Linux x86-64 (glibc) | 4020 B |
-| [`dist/brana-macos`](dist/brana-macos) | macOS 10.13+ na Intel Macu | 4091 B |
+| [`dist/brana-windows.exe`](dist/brana-windows.exe) | Windows (32-bit exe, beží aj na 64-bit) | 3680 B |
+| [`dist/brana-linux`](dist/brana-linux) | Linux x86-64 (glibc) | 4090 B |
+| [`dist/brana-macos`](dist/brana-macos) | macOS 10.13+ na Intel Macu | 4048 B |
 
 ## Spustenie
 
@@ -21,6 +21,12 @@ Intro sa kedykoľvek ukončí klávesom **ESC** (na Linuxe a macOS ktoroukoľvek
 klávesou), inak skončí samo po dohraní hudby. Beží na celej obrazovke v
 natívnom rozlíšení a s neviditeľným kurzorom. Pri štarte sa asi sekundu počíta
 hudba (na GPU), preto je chvíľu čierna obrazovka.
+
+Na Linuxe a vo Windows intro pri štarte zmeria rýchlosť grafiky. Na slabšej
+vykresľuje v menšom rozlíšení, najmenej 11/16 obrazovky v každom smere (napr.
+1320 × 742 na 1920 × 1080), a obraz plynulo zväčší na celú obrazovku. Na
+výkonnej grafike beží vždy v plnom rozlíšení. macOS dostane to isté po
+vyskúšaní na Macu.
 
 ### Windows
 
@@ -135,8 +141,18 @@ bude intro len menej plynulé, nikdy nie pomalšie.
   k monolitu vlastnej bunky, preto krok lúča nesmie siahnuť ďalej, než môže
   stáť monolit v susednej bunke (inak lúč skončí vnútri vyššieho suseda
   a ambient occlusion z toho urobí tmavé pohyblivé pruhy).
+- **Rozlíšenie na slabej grafike** (Linux, Windows): hneď po výpočte hudby intro mimo
+  obrazovky vykreslí dve snímky najnáročnejšieho momentu v polovičnom
+  rozlíšení a zmeria čas (cez `glFinish`, takže nezávisí od obnovovacej
+  frekvencie monitora). Z neho vyberie rozlíšenie k/16 obrazovky, s ktorým
+  vychádza asi 36 ms na snímku, no nikdy menej ako 11/16. Pri k < 16
+  kreslí do textúry a tú zväčší na obrazovku (`glBlitFramebuffer`
+  s lineárnym filtrom); pri k = 16 kreslí priamo do okna ako predtým.
 - **Minifikácia**: [`tools/minify.py`](tools/minify.py) odstráni komentáre
-  a medzery a premenuje identifikátory podľa rozsahu platnosti.
+  a medzery a premenuje identifikátory podľa rozsahu platnosti. Krátke mená
+  vyberá [`tools/names.json`](tools/names.json) z hľadania
+  [`tools/namesearch.py`](tools/namesearch.py), lebo LZMA niektoré
+  pomenovania zbalí lepšie (asi o 40 bajtov).
   [`tools/check_shaders.sh`](tools/check_shaders.sh) overí, že minifikovaná
   verzia generuje bitovo rovnaký zvuk a obraz.
 - **Windows** ([`src/win/main.c`](src/win/main.c)): okno, OpenGL cez WGL,
@@ -199,6 +215,12 @@ a jeho nastavenie), prehrá 2 × 8 sekúnd hudby a prvých 60 s uloží do
 
 ## Testovanie
 
+- Automatické rozlíšenie (Linux, Windows pod Wine a kód pre macOS
+  v simulácii `tools/macsim`): na RTX 3060 intro zvolí plné rozlíšenie
+  a snímka cez jeho vykresľovaciu cestu je bitovo zhodná s referenčnou. So
+  softvérovým rendererom llvmpipe (ako veľmi slabou grafikou) zvolí 11/16
+  a zväčšená snímka sa od referencie vykreslenej v 1760 × 990 a zväčšenej
+  líši v priemere o 0,22 úrovne jasu.
 - Linux verzia: vyskúšaná na skutočnom PC s grafikou NVIDIA GeForce RTX 3060
   (ovládač 615.71.09, CachyOS, GNOME na Waylande cez XWayland, PipeWire 1.6,
   USB headset): hudba aj obraz fungujú. Zvuk, ktorý intro posiela cez ALSA

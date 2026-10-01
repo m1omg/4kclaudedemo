@@ -23,7 +23,10 @@ def sub(s, old, new):
 
 def loc0(s):   # uniform location 0 instead of glGetUniformLocation (loc stays 0 in .bss)
 	s = sub(s, 'F glGetUniformLocation\n', '')
-	s = sub(s, '\tmov edi, eax\n\tlea rsi, [uname]\n\tcall [rbx + glGetUniformLocation]\n\tmov [loc], eax\n', '')
+	call = '\tmov edi, eax\n\tlea rsi, [uname]\n\tcall [rbx + glGetUniformLocation]\n\tmov [loc], eax\n'
+	if s.count(call) not in (1, 2):   # (twice: with and without SCALE)
+		sys.exit('testbuild.py: glGetUniformLocation call not found')
+	s = s.replace(call, '')
 	s = sub(s, 'uname:  db "u", 0\n', '')
 	return sub(s, '"glGetUniformLocation", 0, ', '')
 
@@ -32,6 +35,10 @@ def short(s):  # /System/Library/Frameworks/X.framework/X (also the macsim path)
 	if s.count('".framework/Versions/A/", x, 0') != 2:
 		sys.exit('testbuild.py: framework path pattern changed')
 	return s.replace('".framework/Versions/A/", x, 0', '".framework/", x, 0')
+
+
+def scale(s):  # automatic render resolution (src/mac/main.asm -DSCALE)
+	return '%define SCALE\n' + s
 
 
 HDR0 = 'tail -c+NN "$0"|tar -xf - -C /tmp;exec /tmp/a'   # the release header
@@ -49,6 +56,9 @@ VARIANTS = [   # name, asm change, extra ld64 flags, machopp.py options, cut the
 	('short', short, [], [], False, HDR0),
 	('hdr1', None, [], [], False, HDR1),
 	('hdr2', None, [], [], False, HDR2),
+	('scale', scale, [], [], False, HDR0),
+	('all', lambda s: scale(short(loc0(s))), ['-no_exported_symbols'],
+		['--no-data-in-code', '--drop-sections', '__got,__bss,__text', '--zero-symtab'], True, HDR2),
 ]
 
 

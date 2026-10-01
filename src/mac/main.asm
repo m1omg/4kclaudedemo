@@ -1,4 +1,7 @@
 ; BRANA - 4k intro, macOS x86-64 (GLUT + OpenGL 3.2+ core + AudioQueue)
+; -DSCALE: automatic render resolution for weak GPUs, as on Linux/Windows (a
+; short offscreen speed test picks k/16 of the screen, at least KMIN/16).
+; Off in the release until the container savings make room for it.
 ; nasm -f macho64; linked with ld64.lld against a libSystem .tbd stub.
 ; Only dlopen/dlsym are linked; everything else comes from the name table.
 BITS 64
@@ -16,6 +19,13 @@ global _main
 %endif
 
 ROWS    equ SONG_SAMPLES / 2048 + 1
+%ifdef SCALE
+%ifndef KMIN
+KMIN    equ 11                  ; the render size never goes below 11/16 of the screen
+%endif
+LIMIT   equ 4608                ; k*k*(2 frames at k = 8, ms): about 36 ms per frame
+T_HEAVY equ __float32__(88.0)   ; the moment the speed is measured at (s)
+%endif
 CHUNK   equ 4096                ; stereo frames per audio buffer
 SONG_MS equ SONG_SAMPLES * 10 / 441
 
@@ -57,6 +67,10 @@ F glGenFramebuffers
 F glBindFramebuffer
 F glFramebufferTexture2D
 F glReadPixels
+%ifdef SCALE
+F glBlitFramebuffer
+F glFinish
+%endif
 F AudioQueueNewOutput
 F AudioQueueAllocateBuffer
 F AudioQueueEnqueueBuffer
@@ -113,6 +127,14 @@ _main:
 	call [rbx + glutDisplayFunc]
 	lea rdi, [draw]
 	call [rbx + glutIdleFunc]
+%ifdef SCALE
+	mov edi, 200                ; GLUT_SCREEN_WIDTH / HEIGHT: the window is still
+	call [rbx + glutGet]        ; 300 x 300 until full screen takes effect
+	mov [scr], eax
+	mov edi, 201
+	call [rbx + glutGet]
+	mov [scr + 4], eax
+%endif
 
 	push 1
 	pop rdi
@@ -137,8 +159,15 @@ _main:
 	mov edi, 0x0DE1
 	xor esi, esi
 	mov edx, 0x8814             ; GL_RGBA32F
+%ifdef SCALE
+	mov ecx, 1024               ; width: max(1024, screen width), as the
+	cmp ecx, [scr]              ; render target of reduced resolutions too
+	cmovb ecx, [scr]
+	mov r8d, ROWS
+%else
 	mov ecx, 1024
 	mov r8d, ROWS
+%endif
 	xor r9d, r9d
 	call [rbx + glTexImage2D]
 	add rsp, 32
@@ -175,6 +204,56 @@ _main:
 	call [rbx + glReadPixels]
 	pop rax
 	pop rax
+%ifdef SCALE
+	lea rdi, [visual_frag]
+	call program
+	mov edi, eax
+	lea rsi, [uname]
+	call [rbx + glGetUniformLocation]
+	mov [loc], eax
+	; the GPU's speed: 2 frames of the heaviest moment at half size, offscreen
+	; (still in the framebuffer object, no vsync), after a warm-up frame
+	mov byte [k], 8
+	call setsize
+	mov dword [uni], T_HEAVY
+	call render
+	call [rbx + glFinish]
+	mov edi, 700                ; GLUT_ELAPSED_TIME (ms)
+	call [rbx + glutGet]
+	push rax
+	push rax
+	call render
+	call render
+	call [rbx + glFinish]
+	mov edi, 700
+	call [rbx + glutGet]
+	pop rcx
+	pop rcx
+	sub eax, ecx                ; ms for 2 frames at a quarter of the pixels
+	; the render size is k/16 of the screen: the largest k whose estimated
+	; frame time fits (k*k*eax <= LIMIT), never below KMIN
+	push 16
+	pop rcx
+.k:
+	mov edx, ecx
+	imul edx, ecx
+	imul edx, eax
+	cmp edx, LIMIT
+	jbe .kset
+	dec ecx
+	cmp ecx, KMIN
+	ja .k
+.kset:
+	mov [k], cl
+	cmp cl, 16
+	sbb eax, eax                ; scaled: draw into the framebuffer object, then
+	mov ecx, eax                ; upscale (mask GL_COLOR_BUFFER_BIT); not scaled:
+	and eax, [fbo]              ; draw into the window, mask 0
+	mov [dfb], eax
+	and ecx, 0x4000
+	mov [mask], ecx
+	call setsize
+%else
 	mov edi, 0x8D40
 	xor esi, esi
 	call [rbx + glBindFramebuffer]
@@ -184,6 +263,7 @@ _main:
 	lea rsi, [uname]
 	call [rbx + glGetUniformLocation]
 	mov [loc], eax
+%endif
 
 	lea rax, [queue]
 	push rax
@@ -284,6 +364,67 @@ draw:
 	xor edi, edi
 	call [rbx + exit]
 .run:
+%ifdef SCALE
+	cvtsi2ss xmm0, eax
+	mulss xmm0, [msec]
+	movss [uni], xmm0
+	mov edi, 0x8CA9             ; GL_DRAW_FRAMEBUFFER: the object (scaled) or the window
+	mov esi, [dfb]
+	call [rbx + glBindFramebuffer]
+	call render
+	mov edi, 0x8CA9
+	xor esi, esi
+	call [rbx + glBindFramebuffer]
+	push 0x2601                 ; GL_LINEAR
+	push qword [mask]           ; (only the low 32 bits are read)
+	push qword [scr + 4]
+	push qword [scr]
+	xor edi, edi
+	xor esi, esi
+	mov edx, [ssz]
+	mov ecx, [ssz + 4]
+	xor r8d, r8d
+	xor r9d, r9d
+	call [rbx + glBlitFramebuffer]
+	add rsp, 32
+	call [rbx + glutSwapBuffers]
+	pop rbx
+	ret
+
+; setsize: render size = screen size * k / 16 -> ssz and u.yz
+setsize:
+	movzx eax, byte [k]
+	mov edx, [scr]
+	imul edx, eax
+	shr edx, 4
+	mov ecx, [scr + 4]
+	imul ecx, eax
+	shr ecx, 4
+	mov [ssz], edx
+	mov [ssz + 4], ecx
+	cvtsi2ss xmm0, edx
+	movss [uni + 4], xmm0
+	cvtsi2ss xmm0, ecx
+	movss [uni + 8], xmm0
+	ret
+
+; render: viewport (GLUT's reshape callback resets it) = render size, upload
+; u, draw
+render:
+	push rax                    ; (alignment)
+	xor edi, edi
+	xor esi, esi
+	mov edx, [ssz]
+	mov ecx, [ssz + 4]
+	call [rbx + glViewport]
+	mov edi, [loc]
+	push 1
+	pop rsi
+	lea rdx, [uni]
+	call [rbx + glUniform4fv]
+	pop rax
+	jmp drawtri
+%else
 	cvtsi2ss xmm0, eax
 	mulss xmm0, [msec]
 	movss [uni], xmm0
@@ -304,6 +445,7 @@ draw:
 	call [rbx + glutSwapBuffers]
 	pop rbx
 	ret
+%endif
 
 ; AudioQueue output callback (user, queue, buffer)
 feed:
@@ -349,7 +491,11 @@ names:
 	db "glAttachShader", 0, "glLinkProgram", 0, "glUseProgram", 0, "glUniform4fv", 0
 	db "glGetUniformLocation", 0, "glDrawArrays", 0, "glGenVertexArrays", 0, "glBindVertexArray", 0
 	db "glViewport", 0, "glGenTextures", 0, "glBindTexture", 0, "glTexImage2D", 0
-	db "glGenFramebuffers", 0, "glBindFramebuffer", 0, "glFramebufferTexture2D", 0, "glReadPixels", 0, 0
+	db "glGenFramebuffers", 0, "glBindFramebuffer", 0, "glFramebufferTexture2D", 0, "glReadPixels", 0
+%ifdef SCALE
+	db "glBlitFramebuffer", 0, "glFinish", 0
+%endif
+	db 0
 	db FW("AudioToolbox")
 	db "AudioQueueNewOutput", 0, "AudioQueueAllocateBuffer", 0, "AudioQueueEnqueueBuffer", 0
 	db "AudioQueueStart", 0, 0, 0
@@ -365,6 +511,13 @@ tex:    resd 1
 fbo:    resd 1
 loc:    resd 1
 start:  resd 1
+%ifdef SCALE
+scr:    resd 2                  ; screen size
+ssz:    resd 2                  ; render size
+k:      resd 1
+dfb:    resd 1                  ; draw framebuffer of the frames
+mask:   resd 2                  ; blit mask (+ padding: pushed as a qword)
+%endif
 pos:    resd 1
 alignb 16
 song:   resb ROWS * 1024 * 16 + CHUNK * 64
