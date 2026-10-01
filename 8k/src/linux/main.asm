@@ -558,7 +558,7 @@ KMIN    equ 11                  ; the render size never goes below 11/16 of the 
 %endif
 LIMIT   equ 70312               ; k*k*(2 frames at k = 8, ns >> 16): about 36 ms per frame
 %ifndef T_HEAVY
-T_HEAVY equ __float32__(187.0)  ; the moment the speed is measured at (s): the end of the dive
+T_HEAVY equ __float32__(180.0)  ; the moment the speed is measured at (s): the end of the flight
 %endif
 
 attr:   dd 4, 5, 0              ; GLX_RGBA, GLX_DOUBLEBUFFER

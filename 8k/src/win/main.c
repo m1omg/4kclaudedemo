@@ -63,7 +63,7 @@ int _fltused;
                                   // draw of all of it could exceed the 2 s GPU watchdog
 #define KMIN 11                   // the render size never goes below 11/16 of the screen
 #ifndef T_HEAVY
-#define T_HEAVY 187.0f            // the moment the speed is measured at (s): the end of the dive
+#define T_HEAVY 180.0f            // the moment the speed is measured at (s): the end of the flight
 #endif
 #define LIMIT .036                // the frame time (s) the render size aims at
 
