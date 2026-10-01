@@ -10,9 +10,10 @@
 uniform vec4 u;
 out vec4 o;
 
-float B, T, N, M, E, Q;   // bar; the building's clock (runs backwards at bars 34-36); night;
+float B, T, N, M, E, Q, Z;   // bar; the building's clock (runs backwards at bars 34-36); night;
                           // material and glow of the last map() (0 ground, 1 concrete, 2 steel, 3 glass);
-                          // Q: while marching a ray downwards 1/-rd.y (distance along the ray to the ground), else 1
+                          // Q: while marching a ray downwards 1/-rd.y (distance along the ray to the ground), else 1;
+                          // Z: the scale of the view (shrinks in the dive into the Mandelbulb)
 vec3 L, U;       // direction to the sun; the camera's up
 
 mat2 rot(float a)
@@ -226,7 +227,7 @@ void camera(out vec3 ro, out vec3 ta)
 	} else if (B > 78.) {   // the dive to a peak on the crown of the bulb, the view along its slope:
 		// the height h above it shrinks (self-similar: a landscape at every scale)
 		vec3 n = vec3(0, .915, .403), g = vec3(0, -.403, .915), s = C + vec3(-.081, .997, .46) * 5.;
-		float h = 10. * exp(-(B - 78.) * .43);
+		float h = 10. * Z;
 		ro = s + n * h - g * 2. * h;
 		ta = s + g * 2. * h - n * h * max(86. - B, 0.) * .3;   // (at first looking down at the bulb)
 		U = n;
@@ -244,8 +245,9 @@ void main()
 	B = u.x / 1.92;
 	T = B < 34. ? B : B < 63. ? max(34. - (B - 34.) * 16., 3.) : 3. + (B - 63.) * 4.;   // (the grid fades at 64-65)
 	N = clamp((B - 30.) / 5., 0., 1.) - clamp((B - 63.) / 8., 0., .6);   // night; dawn from bar 63
-	I = clamp(floor((B - 64.) * 4.) + 1., 1., 9.);   // the bulb gains an iteration per beat
+	I = clamp(floor((B - 64.) * 4.) + 1., 1., 8.);   // the bulb gains an iteration per beat
 	H = B > 70. && B < 78. ? sin((B - 70.) * .3927) * .7 : 0.;
+	Z = exp(-clamp(B - 78., 0., 19.) * .43);   // (until bar 97: deeper, the camera would touch the surface)
 	vec2 uv = (2. * gl_FragCoord.xy - u.yz) / u.z;
 	L = normalize(vec3(-.6, .35 - .3 * N, -.5));
 	// the building's frame collapses to a point (bars 36-38); the point grows
@@ -285,31 +287,31 @@ void main()
 	if (t < 200.) {
 		float m = M, e = E;
 		vec4 g = G;
-		vec2 h = vec2(.001, -.001);
+		vec2 h = vec2(.001, -.001) * Z;
 		vec3 n = normalize(h.xyy * map(p + h.xyy) + h.yyx * map(p + h.yyx) + h.yxy * map(p + h.yxy) + h.xxx * map(p + h.xxx));
 		// soft shadow towards the sun
-		float sh = 1., s = .05;
-		for (int i = 0; i < 40; i++) {
-			d = map(p + n * .01 + L * s);
+		float sh = 1., s = .05 * Z;
+		for (int i = 0; i < 24; i++) {
+			d = map(p + n * .01 * Z + L * s);
 			if (M < 9.)
 				sh = min(sh, 12. * d / s);
-			s += clamp(d, .05, 1.5);
-			if (sh < .01 || s > 40.)
+			s += clamp(d, .05 * Z, 1.5 * Z);
+			if (sh < .01 || s > 40. * Z)
 				break;
 		}
 		sh = clamp(sh, 0., 1.);
 		float ao = 1.;
 		for (float k = 1.; k < 4.; k++)
-			ao -= (k * .15 - map(p + n * k * .15)) / k;
+			ao -= (k * .15 - map(p + n * k * .15 * Z) / Z) / k;
 		ao = clamp(ao, 0., 1.);
 		vec3 alb = m < 1. ? vec3(.3, .3, .32) : m < 2. ? vec3(.62, .6, .57) : m < 3. ? vec3(.12, .13, .15) : m < 4. ? vec3(.02, .025, .03)
-			: .5 + .5 * cos(6.28 * (g.w * .6 + g.y * .3 + vec3(0, .15, .3)));
+			: .5 + .5 * cos(6.28 * (g.w * .9 + g.y * .5 + vec3(.1, .3, .5)));
 		if (m < 1.) {   // ground: plaza with joints, the blueprint grid at the start
 			float fw = .02 + t / u.z / abs(rd.y), bp = 1. - grow(6., 4.);   // joint width (a pixel's footprint); blueprint fade
 			vec2 g = abs(fract(p.xz / 2.) - .5);
 			alb *= mix(abs(p.x) < 14. && abs(p.z) < 11. ? 1.6 - .5 * smoothstep(.5 - fw, .5, max(g.x, g.y)) * exp(-fw * 8.) : .6, .25, bp);
 			g = abs(fract(p.xz) - .5);
-			e = (smoothstep(.5 - fw, .5, max(g.x, g.y)) * .25 * exp(-fw * 8.) + smoothstep(.06 + fw, 0., abs(max(abs(p.x) - 7., abs(p.z) - 5.)))
+			e = (smoothstep(.5 - fw, .5, max(g.x, g.y)) * .25 * exp(-fw * 8.) + (1. - smoothstep(0., .06 + fw, abs(max(abs(p.x) - 7., abs(p.z) - 5.))))
 				* step(atan(p.z, p.x), T * 2.1 - 3.14)) * bp * smoothstep(0., 1., T);
 		}
 		vec3 sun = vec3(1.3, .95, .7) * (1. - N * .9);
@@ -323,7 +325,7 @@ void main()
 		if (m < 1. && B > 33. && B < 64.)   // the tesseract mirrored in the plaza
 			col += hyper(p, reflect(rd, n), 1e3) * .15;
 		col += vec3(.3, .75, 1) * e * 2.;
-		col = mix(col, sky(rd), 1. - exp(-t * t * .00003));
+		col = mix(col, sky(rd), 1. - exp(-t * t * .00003 / Z / Z));
 	}
 	if (B > 33. && B < 64.)
 		col += hyper(ro, rd, t) * smoothstep(33., 34.5, B) * (W < 99. ? .4 : 1.);

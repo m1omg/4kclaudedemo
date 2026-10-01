@@ -460,18 +460,18 @@ rescale:
 	movss [uni + 4], xmm0
 	cvtsi2ss xmm0, ecx
 	movss [uni + 8], xmm0
+; viewport(edx = width, ecx = height)
+viewport:
+	xor edi, edi
+	xor esi, esi
+	jmp [rbx + glViewport]
+
 ; band: viewport = rows ebp .. ebp + BAND of the music
 band:
 	xor edi, edi
 	mov esi, ebp
 	mov edx, 1024
 	mov ecx, BAND
-	jmp [rbx + glViewport]
-
-; viewport(edx = width, ecx = height)
-viewport:
-	xor edi, edi
-	xor esi, esi
 	jmp [rbx + glViewport]
 
 ; program(rax = fragment source): compile, link and bind
@@ -558,7 +558,7 @@ KMIN    equ 11                  ; the render size never goes below 11/16 of the 
 %endif
 LIMIT   equ 70312               ; k*k*(2 frames at k = 8, ns >> 16): about 36 ms per frame
 %ifndef T_HEAVY
-T_HEAVY equ __float32__(150.0)  ; the moment the speed is measured at (s)
+T_HEAVY equ __float32__(187.0)  ; the moment the speed is measured at (s): the end of the dive
 %endif
 
 attr:   dd 4, 5, 0              ; GLX_RGBA, GLX_DOUBLEBUFFER
