@@ -49,6 +49,12 @@ CORE_BOUND = ('\t\td = f;\n\t\tg = length(p) - .5;\n'
 	'\t\tfor (int i = 0; i < 6; i++) {')
 
 
+GLOBALS = 'float B, S, V, G, M, Q;'
+CORE_ROT = '\t\t\tp.xy *= rot(B * .6 + i);\n\t\t\tp.yz *= rot(B * .4);\n'
+CORE_START = '\t\td = f;\n\t\tg = length(p) - .5;\n'
+TUN_NL = '\t\tfloat n = S * 2. + 2. + V, l = 4.3 * tan(3.1416 / n) - (S - 1.) * .2;\n'
+
+
 def normal_loop(s):
 	return sub(s, NORMAL, NORMAL_LOOP)
 
@@ -69,18 +75,42 @@ def core_bound(s):
 	return sub(s, CORE, CORE_BOUND)
 
 
+def core_hoist(s):   # the core's 7 ring rotations once per pixel (in main), not in every map()
+	s = sub(s, GLOBALS, 'mat2 R[6], Y;\n' + GLOBALS)
+	s = sub(s, CORE_ROT, '\t\t\tp.xy *= R[i];\n\t\t\tp.yz *= Y;\n')
+	return sub(s, '\t\tS = 2.;\n', '\t\tS = 2.;\n\t\tfor (int i = 0; i < 6; i++) R[i] = rot(B * .6 + i);\n\t\tY = rot(B * .4);\n')
+
+
+def core_inc(s):   # the same rotations by angle addition: 2 sin/cos pairs per map() instead of 7
+	s = sub(s, CORE_START, '\t\tmat2 rr = rot(B * .6), ry = rot(B * .4);\n' + CORE_START)
+	return sub(s, CORE_ROT, '\t\t\tp.xy *= rr;\n\t\t\tp.yz *= ry;\n\t\t\trr *= rot(1.);\n')
+
+
+def tun_hoist(s):   # the tunnels' sides and length (tan) once per pixel, not in every map()
+	s = sub(s, GLOBALS, GLOBALS[:-1] + ', N, L;')
+	s = sub(s, TUN_NL, '')
+	s = sub(s, '* n + .5) / n * 6.283', '* N + .5) / N * 6.283')
+	s = sub(s, 'vec3(.4, l + .4, .3)', 'vec3(.4, L + .4, .3)')
+	s = sub(s, 'vec3(.02, l, .2)', 'vec3(.02, L, .2)')
+	return sub(s, '\t\tV = mod(floor(B / 4.), 3.);\n', '\t\tV = mod(floor(B / 4.), 3.);\n'
+		'\t\tN = S * 2. + 2. + V;\n\t\tL = 4.3 * tan(3.1416 / N) - (S - 1.) * .2;\n')
+
+
 def refl60(s):   # 60 steps for the floor reflection instead of 120
 	return sub(s, MARCH, 'for (int i = 0; i < 120 - b * 60; i++)')
 
 
+# round 2: the atom (core) and the tunnels; ao3 checks the measurement (it does
+# strictly less work than current, but measured slower in round 1)
 VARIANTS = [
 	('current', lambda s: s),
-	('normal_loop', normal_loop),
-	('no_unroll', no_unroll),
 	('ao3', ao3),
 	('core_bound', core_bound),
-	('refl60', refl60),
-	('all', lambda s: refl60(core_bound(ao3(no_unroll(s))))),
+	('core_hoist', core_hoist),
+	('core_inc', core_inc),
+	('tun_hoist', tun_hoist),
+	('opt', lambda s: tun_hoist(core_hoist(core_bound(s)))),
+	('opt_inc', lambda s: tun_hoist(core_inc(core_bound(s)))),
 ]
 
 srcs = []
