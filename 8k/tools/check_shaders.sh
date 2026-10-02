@@ -23,7 +23,7 @@ $P music src/shaders.h.synth.frag.min $S/rz_b.wav $SECS 2>/dev/null
 cmp $S/rz_a.wav $S/rz_b.wav
 $P -core music src/shaders.h.synth.frag.min $S/rz_c.wav $SECS 2>/dev/null
 cmp $S/rz_a.wav $S/rz_c.wav
-for t in ${TIMES:-5 30 60 70 80 100 125 140 150 165 180 195}; do
+for t in ${TIMES:-5 30 60 70 80 100 110 125 140 150 165 180 195}; do
 	$P frame src/scene.frag $t 160 90 $S/rz_a.ppm 2>/dev/null
 	$P frame src/shaders.h.scene.frag.min $t 160 90 $S/rz_b.ppm 2>/dev/null
 	$P -core frame src/shaders.h.scene.frag.min $t 160 90 $S/rz_c.ppm 2>/dev/null

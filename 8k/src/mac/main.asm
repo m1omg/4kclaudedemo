@@ -1,7 +1,8 @@
 ; ROZMERY - 8k intro, macOS x86-64 (GLUT + OpenGL 3.2+ core + AudioQueue)
 ; (platform layer adapted from the 4k intro BRANA in the parent directory)
 ; Automatic render resolution for weak GPUs, as on Linux/Windows (a short
-; offscreen speed test picks k/16 of the screen, at least KMIN/16).
+; offscreen speed test picks k/16 of the screen, at least KMIN/16); at full
+; size u.w = 1 lets the shader take 4 samples per pixel where that is cheap.
 ; nasm -f macho64; linked with ld64.lld against a libSystem .tbd stub.
 ; Only dlopen/dlsym are linked; everything else comes from the name table.
 BITS 64
@@ -258,6 +259,9 @@ _main:
 .kset:
 	mov [k], cl
 	cmp cl, 16
+	jb .noss
+	mov dword [uni + 12], __float32__(1.0)   ; full size: u.w = 1, the shader may
+.noss:                          ; take 4 samples per pixel where that is cheap
 	sbb eax, eax                ; scaled: draw into the framebuffer object, then
 	mov ecx, eax                ; upscale (mask GL_COLOR_BUFFER_BIT); not scaled:
 	and eax, [fbo]              ; draw into the window, mask 0

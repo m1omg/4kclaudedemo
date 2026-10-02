@@ -10,12 +10,12 @@ files.
 
 | File | Size | Tested |
 |---|---|---|
-| `dist/rozmery-windows.exe` | 6424 B | Wine 9.0 + Mesa llvmpipe: whole demo, visuals correct, 32 of 33 checked audio windows sample-exact, the other one holds a skip of Wine's (see 6) |
-| `dist/rozmery-linux` | 7341 B | Xvfb + llvmpipe + PipeWire: whole demo, audio bit-identical over the whole song, ESC, k = 11 |
-| `dist/rozmery-macos` | 7507 B | `../tools/macsim` (its machine code on Linux): whole demo, audio bit-identical over the whole song |
+| `dist/rozmery-windows.exe` | 6498 B | Wine 9.0 + Mesa llvmpipe: whole demo, visuals correct, 32 of 33 checked audio windows sample-exact, the other one holds a skip of Wine's (see 6) |
+| `dist/rozmery-linux` | 7413 B | Xvfb + llvmpipe + PipeWire: whole demo, audio bit-identical over the whole song, ESC, k = 11; forced full size: frames = the preview's with u.w = 1 (see 6) |
+| `dist/rozmery-macos` | 7573 B | `../tools/macsim` (its machine code on Linux): whole demo, audio bit-identical over the whole song |
 
 - The limit is 8192 bytes per file (`build.sh` checks it). Margins: Windows
-  1768 B, Linux 851 B, macOS 685 B.
+  1694 B, Linux 779 B, macOS 619 B.
 - **Never run on real hardware** (no real GPU, no real Windows or Mac in the
   cloud environment it was made in). The owner has an NVIDIA RTX 3060 PC
   (CachyOS, 2560x1440) and an Intel MacBook with Intel HD Graphics.
@@ -30,6 +30,10 @@ files.
   the flight over the Mandelbulb was bland, "it flies a straight line
   forward" while the beautiful formations stayed at the sides; it should show
   the hills and valleys. The flight now winds through them (4.3).
+- Then: "on powerful machines, can the resolution of the building part be
+  higher?" Fast GPUs already rendered at the native resolution (k = 16, e.g.
+  the RTX 3060 at 2560x1440); now they also supersample the building part
+  (4.4).
 
 ## 2. Layout
 
@@ -75,6 +79,9 @@ Generated (ignored): `src/shaders.h`, `src/shaders.inc`, `src/shaders.h.*.min`, 
 
 ## 4. Visuals (`src/scene.frag`)
 
+- The uniform `u` = (time in s, render width, render height, `u.w`): `u.w` = 1
+  when the platform layer renders at full size (k = 16), which lets the
+  shader supersample (4.4); 0 otherwise and during the speed test.
 - Globals: `B` bar; `T` the building's clock (rewinds 34–36.5, then 3; from
   63 it runs on so the blueprint grid fades); `N` night; `M`/`E` material and
   glow of the last `map()`; `Q` analytic ground step (1/-rd.y while marching
@@ -191,6 +198,35 @@ Cuts remain at 46 and 54 (on the drops).
   calls). The sky uses `dot(rd, U)` (the local horizon).
 - The ground fades into the sky over 66–70 (and is gone from 70).
 
+### 4.4 Supersampling on fast GPUs
+
+- When the speed test picks full size (k = 16), the platform layers set
+  `u.w = 1` (Windows `uni[3] = !rfb`, Linux/macOS a store after the k loop).
+  For `B < 46` the shader then runs its per-ray code 4 times per pixel, at
+  the rotated-grid offsets (.125, .375), (.375, -.125), (-.125, -.375),
+  (-.375, .125) pixels, and averages the final colours (after the tone map,
+  gamma and vignette), like rendering at 2x and scaling down. With 1 sample
+  the jitter is 0 and the frames are bit-identical to the previous version.
+- The range ends on the camera cut at bar 46 (the drop), where the switch
+  cannot be seen: the building, its disassembly and the tesseract's birth.
+- Cost: 4 samples cost 2.7–3.5x one (sky pixels are cheap). On llvmpipe at
+  480x270 (in one session: the container's speed changes after a restart)
+  the supersampled frames take 29–73 ms in the building and up to 134 ms
+  around the dusk and the tesseract's birth (bars 34–44), the heaviest
+  flight frame 167 ms. If GPUs have similar ratios (not measured), any GPU
+  that gets k = 16 (the flight fits the 36 ms target at full size) also runs
+  the supersampled frames within it, and the slowest moment of the demo stays
+  the flight: on the RTX 3060 at 2560x1440 ~12 ms at most for the building
+  part, against ~15.5 ms for the flight (estimates, see 7).
+- Possible extension: the tesseract part (46–62) has thin glowing edges too;
+  supersampled it would cost up to ~0.9x the heaviest flight frame (the
+  slices, 54–62). The switch could then sit at the beat of silence before the
+  bulb (63.75–64). The bulb part would be too slow.
+- Why not a 2x framebuffer object and a downscaling blit: the window's
+  framebuffer may be multisampled when a driver forces antialiasing, and a
+  blit into it fails (the existing upscale for k < 16 has that risk); this
+  way the frame goes straight to the window as before.
+
 ## 5. Music (`src/synth.frag`)
 
 - `song(i)`: integer sample index; 16th = 5292 samples, bar = 84672.
@@ -237,11 +273,25 @@ python3 tools/flypath.py
   (`nasm -f elf64 ... -I 8k/src/ 8k/src/mac/main.asm`). Test builds:
   `NASMFLAGS=-DSHOWK` prints the chosen render size k.
 - Captured audio vs `preview music` of the minified synth: Linux and macsim
-  bit-identical over the whole song. Wine (`LP_NUM_THREADS=2`): 32 of 33
+  bit-identical over the whole song. (The capture can lose a block under
+  load: one Linux run lacked 2048 samples at 3.2 s, exact on both sides; the
+  re-run was bit-identical over the whole song.) Wine (`LP_NUM_THREADS=2`): 32 of 33
   checked 2-s windows sample-exact; the 33rd holds a 128-sample skip (exact
   on both sides of it). The capture has gaps and skips: Wine's audio
   underruns while llvmpipe takes the CPUs. After a container restart the
   first Wine run updates `~/.wine` and starts ~60 s late.
+- The supersampled path is not covered by `check_shaders.sh`:
+  `../tools/preview.c` always passes `u.w = 0`. To render with `u.w = 1`,
+  build a copy with `getenv("UW") ? atof(getenv("UW")) : 0` as the 4th
+  argument of its `glUniform4f`, then `UW=1 $S/preview_uw frame ...`. With it,
+  the minified shader renders bit-identically to the source in both modes.
+- To run the platform layers at full size here (llvmpipe always picks 11),
+  patch a copy: Linux `LIMIT equ 0x7fffffff`, macOS the same, Windows
+  `#define LIMIT 1e9` (`KMIN=16` does not work: the k loop then ends at 15).
+  With `-DSNAP` (Linux, Windows) the frame at 26 s is written to `snap.rgb`:
+  both equal `UW=1` preview frames exactly. macsim with a copy of
+  `../tools/macsim/gl.c` that logs `glUniform4fv` showed `u.w = 1` at full
+  size.
 - `check_shaders.sh`: in the flight, the core context's frames differ from
   the compat ones along thin colour boundaries of the fractal (the last bit
   of float precision moves them): at most 0.04 % of the pixels at 160x90 over
