@@ -27,7 +27,7 @@ KMIN    equ 11                  ; the render size never goes below 11/16 of the 
 %endif
 LIMIT   equ 4608                ; k*k*(2 frames at k = 8, ms): about 36 ms per frame
 %ifndef T_HEAVY
-T_HEAVY equ __float32__(180.0)  ; the moment the speed is measured at (s): the end of the flight
+T_HEAVY equ __float32__(175.3)  ; the moment the speed is measured at (s): the valley in the flight
 %endif
 %endif
 CHUNK   equ 4096                ; stereo frames per audio buffer

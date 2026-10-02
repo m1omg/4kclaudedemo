@@ -19,9 +19,11 @@ behu vypočíta všetko — 3D grafiku aj hudbu. Demo trvá **3:20**.
 3. **Mandelbulb.** Teserakt sa zrúti do bodu, z neho sa za úsvitu zrodí
    farebný Mandelbulb (s každou dobou mu pribudne jedna iterácia) a chvíľu
    „dýcha". Potom sa kamera bez strihu ponorí do toho istého Mandelbulbu,
-   preletí ponad hrebeň a nízko a rýchlo letí po „hrádzi" pozdĺž jeho rovníka
-   smerom k vychádzajúcemu slnku — čím nižšie, tým rýchlejšie, s miernym
-   kľučkovaním. Na konci hrádze vystúpi ponad ďalší hrebeň, vzdiali sa a
+   preletí ponad hrebeň na „hrádzu" pozdĺž jeho rovníka a nízko a rýchlo
+   letí krajinou fraktálu: z hrádze odbočí do lesa púčikov, kľukatí sa
+   pomedzi veže proti slnku, zletí do údolia, vystúpa po stene obrovského
+   útvaru a preletí ponad jeho farebný vrchol. Klesá do údolí, stúpa ponad
+   vyvýšeniny a v zákrutách sa nakláňa. Nakoniec vystúpi, vzdiali sa a
    ukáže celý Mandelbulb.
 
 Hudba je **synthwave** (125 BPM): snare s „gated reverb" ako v 80. rokoch,
@@ -31,16 +33,27 @@ Je zladená s obrazom: zvonček stúpa so schodiskom (tón na každý schod), pr
 rozoberaní budovy sa pad nadýchne, šum sleduje rýchlosť rozoberania a arpeggio
 beží odzadu; obrys sa zrúti na tri hlboké údery. Arpeggio teseraktu má v takte
 toľko tónov, koľko má útvar vrcholov (úsečka 2, štvorec 4, kocka 8, teserakt
-16). Zrod Mandelbulbu sprevádza úder a tón na každú novú iteráciu, let po hrádzi
-nesie hlavnú melódiu (druhýkrát aj o oktávu vyššie) a demo končí akordom Cmaj7.
+16). Zrod Mandelbulbu sprevádza úder a tón na každú novú iteráciu, let krajinou
+Mandelbulbu nesie hlavnú melódiu (druhýkrát aj o oktávu vyššie) a demo končí
+akordom Cmaj7.
 
 | Súbor | Platforma | Veľkosť |
 |---|---|---|
-| [`dist/rozmery-windows.exe`](dist/rozmery-windows.exe) | Windows (32-bit exe, beží aj na 64-bit) | 6103 B |
-| [`dist/rozmery-linux`](dist/rozmery-linux) | Linux x86-64 (glibc) | 6968 B |
-| [`dist/rozmery-macos`](dist/rozmery-macos) | macOS 10.13+ na Intel Macu | 7120 B |
+| [`dist/rozmery-windows.exe`](dist/rozmery-windows.exe) | Windows (32-bit exe, beží aj na 64-bit) | 6424 B |
+| [`dist/rozmery-linux`](dist/rozmery-linux) | Linux x86-64 (glibc) | 7341 B |
+| [`dist/rozmery-macos`](dist/rozmery-macos) | macOS 10.13+ na Intel Macu | 7507 B |
 
 ### Zmeny v tejto verzii
+
+- Let nad Mandelbulbom už nejde rovno po hrádzi, kde krásne útvary zostávali
+  len po bokoch. Trasa sa kľukatí priamo pomedzi ne — les púčikov, veže,
+  údolie a výstup ponad obrovský útvar; kamera klesá do údolí, stúpa ponad
+  vyvýšeniny a v zákrutách sa nakláňa. Trasu som navrhol podľa mapy povrchu
+  Mandelbulbu, výška letu sleduje terén tesne nad ním (`tools/flypath.py`).
+- Rýchlosť grafiky sa pri štarte meria v novom najnáročnejšom mieste dema
+  (v údolí počas letu).
+
+### Predchádzajúca verzia
 
 - Opravená chyba vykresľovania budovy: svetelné šmuhy a „duchovia" schodov v
   jej tieni na námestí (lúče tieňov končili príliš skoro) a drobné bodky na
@@ -62,9 +75,9 @@ natívnom rozlíšení a s neviditeľným kurzorom. Pri štarte sa počíta hudb
 GPU, 3:20 stereo), preto je chvíľu čierna obrazovka.
 
 Všetky tri verzie pri štarte zmerajú rýchlosť grafiky na najnáročnejšom
-mieste dema (koniec letu nad Mandelbulbom). Na slabšej grafike vykresľujú v
-menšom rozlíšení, najmenej 11/16 obrazovky v každom smere, a obraz plynulo
-zväčšia na celú obrazovku. Na výkonnej grafike bežia v plnom rozlíšení.
+mieste dema (údolie počas letu nad Mandelbulbom). Na slabšej grafike
+vykresľujú v menšom rozlíšení, najmenej 11/16 obrazovky v každom smere, a
+obraz plynulo zväčšia na celú obrazovku. Na výkonnej grafike bežia v plnom rozlíšení.
 Animácia ide podľa času (podľa prehrávanej hudby), nie podľa počtu snímok,
 takže nezávisí od obnovovacej frekvencie monitora.
 
@@ -120,22 +133,24 @@ llvmpipe, virtuálne zvukové zariadenia):
 - **macOS:** strojový kód macOS verzie spustený na Linuxe s náhradnými
   GLUT/OpenGL/AudioToolbox knižnicami (`../tools/macsim`): zvuk v celej dĺžke
   bit po bite zhodný, obraz správny. **Na skutočnom Macu zatiaľ nie.**
-- **Windows:** Wine 9.0 s llvmpipe: všetky kontrolované úseky zvuku sú vzorka
-  po vzorke zhodné s referenciou (Wine pri plne vyťaženom procesore občas
-  vynechá kúsok, to je vlastnosť testovacieho prostredia), obraz správny.
+- **Windows:** Wine 9.0 s llvmpipe: zvuk je vzorka po vzorke zhodný s
+  referenciou (32 z 33 kontrolovaných úsekov; v zvyšnom Wine pri plne
+  vyťaženom procesore vynechal kúsok, to je vlastnosť testovacieho
+  prostredia), obraz správny.
   **Na skutočných Windows zatiaľ nie.**
 - Shadery v minifikovanej podobe vykresľujú presne to isté ako zdrojové
   (hudba aj snímky) — `tools/check_shaders.sh`. V core profile (ako na macOS)
-  sa pri lete nad Mandelbulbom líšia tenké farebné hranice fraktálu (pod 0,3 %
+  sa pri lete nad Mandelbulbom líšia tenké farebné hranice fraktálu (pod 0,1 %
   pixelov), to je presnosť výpočtov, nie chyba.
-- Kamera sa pri lete nikdy nedotkne povrchu fraktálu: dráha je overená
-  výpočtom v plnej presnosti (`tools/flypath.py`).
+- Kamera sa pri lete nikdy nedotkne povrchu fraktálu a otáča sa plynulo, bez
+  trhnutí: dráha aj natočenie kamery sú overené výpočtom v plnej presnosti
+  (`tools/flypath.py`).
 
 Na skutočných grafikách (NVIDIA, AMD, Intel) demo zatiaľ nebežalo. Shadery
 dodržiavajú pravidlá, ktoré sa ukázali ako dôležité pri 4K intre na NVIDIA
 (žiadne celé čísla v preťažených vstavaných funkciách, žiadne nedefinované
 konštrukcie GLSL). Odhad podľa meraní 4K intra: na RTX 3060 v 2560 × 1440
-okolo 15 ms na snímku v najnáročnejšom mieste (koniec letu).
+okolo 15,5 ms na snímku v najnáročnejšom mieste (údolie počas letu).
 
 ## Ako je to urobené
 
@@ -151,10 +166,12 @@ okolo 15 ms na snímku v najnáročnejšom mieste (koniec letu).
   v 4D a premietnutých perspektívou do 3D, hrany ako žiariace čiary, steny
   priesvitné; rez nadrovinou je konvexný mnohosten, ktorý sa pretína s lúčom
   presne (4 „pásy" v 4D). Mandelbulb má mocninu 8 a farby z orbit trapu.
-  Dráhu letu som navrhol podľa mapy jeho povrchu (pozdĺž rovníka je hrádza s
-  takmer konštantnou výškou, na oboch koncoch hrebeň); kamera letí tesne nad
-  ňou, smer „hore" a obloha sa riadia povrchom pod ňou a tiene, AO aj hmla sa
-  škálujú s výškou letu, takže na každej mierke je to krajina.
+  Dráhu letu som navrhol podľa mapy výšky jeho povrchu: trasa vedie cez body
+  vybrané na mape, výška letu je vyhladený terén pod trasou plus malá výška
+  (kamera začne stúpať ešte pred kopcom). Kamera hľadí dopredu po trase a v
+  zákrutách sa nakláňa podľa ich zakrivenia, smer „hore" a obloha sa riadia
+  povrchom pod ňou a tiene, AO aj hmla sa škálujú s mierkou letu, takže na
+  každej mierke je to krajina.
 - **Platformy:** vrstvy pre Windows (C + Crinkler), Linux (ručne písaný ELF v
   NASM) a macOS (NASM + ld64.lld, dropper) sú prevzaté a upravené zo 4K intra
   BRÁNA v tomto repozitári; obsah dema (obraz aj hudba) je nový.

@@ -9,15 +9,16 @@
 //          from the dusk shot); 4D rotation; 3D slices through it
 //   62-70  it collapses; the Mandelbulb grows out of the point, breathes
 //   70-78  the camera dives into the same bulb, over a ridge onto a causeway
-//   78-94  a low, weaving flight along the causeway toward the rising sun
-//   94-104 pull-up over the far ridge, back out to the whole bulb; fade
+//   78-95  a low flight off the causeway, winding through the bulb's formations:
+//          a forest of buds, a valley, up over a giant formation into the sun
+//   95-104 the camera climbs back out to the whole bulb; fade
 uniform vec4 u;
 out vec4 o;
 
 float B, T, N, M, E, Q, Z;   // bar; the building's clock (runs back at bars 34-36.5); night;
                           // material and glow of the last map() (0 ground, 1 concrete, 2 steel, 3 glass);
                           // Q: while marching a ray downwards 1/-rd.y (distance along the ray to the ground), else 1;
-                          // Z: the scale of the view (the camera's height above the causeway in the flight)
+                          // Z: the scale of the view (~ the camera's height above the bulb's surface in the flight)
 vec3 L, U;       // direction to the sun; the camera's up
 
 mat2 rot(float a)
@@ -212,6 +213,32 @@ float map(vec3 p)
 	return D;
 }
 
+// the flight over the Mandelbulb: latitude, longitude and radius (bulb units) for each bar from 77,
+// designed over a map of its surface (tools/flypath.py); Catmull-Rom in between, then on along the orbit
+const vec3 K[25] = vec3[](
+	vec3(1.563, -.6284, .933), vec3(1.5708, -.66, .8845), vec3(1.5708, -.69, .8804), vec3(1.575, -.72, .8804),
+	vec3(1.59, -.75, .88), vec3(1.61, -.775, .8683), vec3(1.628, -.8, .8702), vec3(1.64, -.83, .8782),
+	vec3(1.645, -.865, .8803), vec3(1.642, -.9, .8803), vec3(1.65, -.935, .8769), vec3(1.668, -.965, .8568),
+	vec3(1.685, -.995, .8416), vec3(1.692, -1.03, .8349), vec3(1.69, -1.065, .8352), vec3(1.68, -1.1, .8542),
+	vec3(1.665, -1.135, .9308), vec3(1.645, -1.165, .959), vec3(1.625, -1.195, .961), vec3(1.61, -1.225, .961),
+	vec3(1.595, -1.255, .961), vec3(1.58, -1.285, .961), vec3(1.565, -1.315, .961), vec3(1.55, -1.345, .961),
+	vec3(1.535, -1.375, .961));
+
+vec3 fly(float t)
+{
+	float g = clamp(t, 78., 99.9) - 78.;
+	int i = int(g);
+	vec3 a = K[i], b = K[i + 1], c = K[i + 2], d = K[i + 3];
+	g -= float(i);
+	return .5 * (2. * b + (c - a) * g + (2. * a - 5. * b + 4. * c - d) * g * g + (3. * (b - c) + d - a) * g * g * g) - vec3(0, .03, 0) * max(t - 99.9, 0.);
+}
+
+// (latitude, longitude, radius) -> bulb space
+vec3 sph(vec3 s)
+{
+	return vec3(sin(s.x) * cos(s.y), cos(s.x), sin(s.x) * sin(s.y)) * s.z;
+}
+
 // camera for bar B: a shot per musical phrase
 void camera(out vec3 ro, out vec3 ta)
 {
@@ -237,19 +264,22 @@ void camera(out vec3 ro, out vec3 ta)
 		float a = 2.29 + (B - 30.) * .04;
 		ro = C + vec3(sin(a), 0, cos(a)) * mix(40. - (B - 30.) * 2.5, 13. + (B - 38.) * .6, b) + vec3(0, mix((B - 30.) * .3 - 4.6, 2., b), 0);
 	} else if (B > 62.) {   // the Mandelbulb (bulb units: x 5): an orbit that dives over a ridge onto a causeway
-		// along its equator, a low, weaving flight toward the rising sun (lower and lower, so faster and
-		// faster), a pull-up over the far ridge and back out to the orbit
+		// along its equator; the flight winds off it through a forest of buds, down a valley and up over
+		// a giant formation into the sun, banking into the turns, then climbs back out to the orbit
 		b = clamp((B - 70.) / 8., 0., 1.);
-		float k = smoothstep(70., 78., B), c = smoothstep(93., 100., B), f = k * (1. - c),
-			ph = -.1376 - .0306 * (B - 70.) - .0694 * (B < 70. ? B - 70. : 8. * (b - b * b * b + b * b * b * b * .5)),
-			th = mix(1.39 + .1808 * k + .004 * sin(B * 1.571) * k, 1.39, c),
-			h = exp(mix(mix(.8671, -5.116 - .0866 * max(B - 78., 0.), k), .8755, c));
-		vec3 v = vec3(sin(th) * cos(ph), cos(th), sin(th) * sin(ph)), w = vec3(sin(ph), 0, -cos(ph));
-		float r = .88 - .106 * (ph + .898) * (ph + .898);   // the causeway's crest; over the ridges at its ends: .955
-		ro = C + v * (mix(r, .955, smoothstep(-.67, -.6, ph) + 1. - smoothstep(-1.2, -1.13, ph)) + h) * 5.;
-		ta = mix(C, ro + w - v * .12, f);
-		U = normalize(mix(U, v - cross(w, v) * .25 * sin(B * 1.571), f));
-		Z = min((length(ro - C) * .2 - r) * .5, 1.);   // the scale of the view: the height above the causeway
+		float k = smoothstep(70., 78., B), c = smoothstep(95., 100., B), f = k * (1. - c), e = smoothstep(78., 79., B),
+			ph = -.1376 - .0306 * (B - 70.) - .0694 * (B < 70. ? B - 70. : 8. * (b - b * b * b + b * b * b * b * .5));
+		vec3 s = B > 78. ? fly(B) : vec3(1.39 + .1808 * k, ph, mix(.88 - .106 * (ph + .898) * (ph + .898), .955, smoothstep(-.67, -.6, ph))
+			+ exp(mix(.8671, -5.116, k))), p = sph(fly(B)), v, w;
+		s = vec3(mix(s.x, 1.39, c), s.y, exp(mix(log(s.z - .8), .9339, c)) + .8);   // (back out to radius 3.345)
+		v = sph(vec3(s.xy, 1));
+		ro = C + v * s.z * 5.;
+		w = sph(fly(B + .35)) - p - v * .0015;   // ahead along the flight, nearly level
+		w = mix(vec3(sin(ph), 0, -cos(ph)) - v * .12, normalize(w - v * dot(w, v) * .7), e);
+		ta = B < 78. ? mix(C, ro + w, f) : ro + mix(normalize(C - ro), w, f);
+		vec3 a = sph(fly(B + 1.)) - 2. * p + sph(fly(B - 1.)), x = normalize(cross(w, v));
+		U = normalize(mix(U, v + x * dot(a, x) * 30. * e, f));   // (banking into the turns)
+		Z = min(.5 * exp(mix(mix(.8671, -4.3, k), .87, c)), 1.);   // the scale of the view
 		b = -2.26 - .01 * max(B - 78., 0.);
 		L = normalize(mix(vec3(sin(1.284) * cos(ph - .6), cos(1.284), sin(1.284) * sin(ph - .6)), vec3(cos(b), 0, sin(b)), f));
 	} else {   // around the tesseract: from below while it turns, from above while it is sliced
