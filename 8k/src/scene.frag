@@ -1,5 +1,5 @@
 #version 330
-// ROZMERY - visuals. u = (time in seconds, width, height, 0).
+// ROZMERY - visuals. u = (time in seconds, width, height, 1 if the GPU is fast: supersample until bar 46).
 // The bar B (125 BPM: 1.92 s) drives everything, in sync with the music:
 //    0-30  a building assembles itself (ground, columns, slabs, stairs, facade)
 //   30-34  dusk, the lights come on; the building's frame glows
@@ -296,7 +296,6 @@ void main()
 	I = clamp(floor((B - 64.) * 4.) + 1., 1., 8.);   // the bulb gains an iteration per beat
 	H = B > 66. && B < 70. ? sin((B - 66.) * .785) * .7 : 0.;
 	Z = 1.;
-	vec2 uv = (2. * gl_FragCoord.xy - u.yz) / u.z;
 	L = normalize(vec3(-.6, .35 - .3 * N, -.5));
 	// the building's frame collapses to a point (bars 36.5-38); the point grows
 	// into a line, square, cube and tesseract (38-46), which turns in 4D and
@@ -321,79 +320,89 @@ void main()
 	vec3 ro, ta;
 	U = vec3(0, 1, 0);
 	camera(ro, ta);
-	vec3 w = normalize(ta - ro), x = normalize(cross(w, U)), rd = normalize(uv.x * x + uv.y * cross(x, w) + 1.8 * w);
-	float t = 0., d;
-	Q = -1. / min(rd.y, -1e-6);
-	float tm = min(200., 600. * Z);   // (beyond: only haze)
-	for (int i = 0; i < 128; i++) {
-		d = map(ro + rd * t);
-		if (d < .001 * t || t > tm)
-			break;
-		t += d;
-	}
-	vec3 col = sky(rd), p = ro + rd * t;
-	Q = 1.;
-	if (t < tm) {
-		float m = M, e = E;
-		vec4 g = G;
-		vec2 h = vec2(.001, -.001) * Z;
-		vec3 n = normalize(h.xyy * map(p + h.xyy) + h.yyx * map(p + h.yyx) + h.yxy * map(p + h.yxy) + h.xxx * map(p + h.xxx));
-		// soft shadow towards the sun
-		float sh = 1., s = .05 * Z;
-		for (int i = 0; i < (B < 62. ? 40 : 24); i++) {   // (the building's thin parts need 40 steps)
-			d = map(p + n * .01 * Z + L * s);
-			if (M < 9.)
-				sh = min(sh, 12. * d / s);
-			s += clamp(d, .05 * Z, 1.5 * Z);
-			if (sh < .01 || s > 40. * Z)
+	// on a fast GPU (u.w = 1) up to the cut at bar 46 (the building, its disassembly and the
+	// tesseract's birth): 4 samples per pixel on a rotated grid, their final colours averaged
+	float ns = u.w > 0. && B < 46. ? 4. : 1.;
+	vec3 w = normalize(ta - ro), x = normalize(cross(w, U)), cs = vec3(0);
+	vec2 j = ns > 1. ? vec2(.125, .375) : vec2(0);
+	for (float q = 0.; q < ns; q++) {
+		vec2 uv = (2. * (gl_FragCoord.xy + j) - u.yz) / u.z;
+		vec3 rd = normalize(uv.x * x + uv.y * cross(x, w) + 1.8 * w);
+		float t = 0., d;
+		Q = -1. / min(rd.y, -1e-6);
+		float tm = min(200., 600. * Z);   // (beyond: only haze)
+		for (int i = 0; i < 128; i++) {
+			d = map(ro + rd * t);
+			if (d < .001 * t || t > tm)
 				break;
+			t += d;
 		}
-		sh = clamp(sh, 0., 1.);
-		float ao = 1.;
-		for (float k = 1.; k < 4.; k++)
-			ao -= (k * .15 - map(p + n * k * .15 * Z) / Z) / k;
-		ao = clamp(ao, 0., 1.);
-		vec3 alb = m < 1. ? vec3(.3, .3, .32) : m < 2. ? vec3(.62, .6, .57) : m < 3. ? vec3(.12, .13, .15) : m < 4. ? vec3(.02, .025, .03)
-			: .5 + .5 * cos(6.28 * (g.w * .9 + g.y * .5 + vec3(.1, .3, .5)));
-		if (m < 1.) {   // ground: plaza with joints, the blueprint grid at the start
-			float fw = .02 + t / u.z / abs(rd.y), bp = 1. - grow(6., 4.);   // joint width (a pixel's footprint); blueprint fade
-			vec2 g = abs(fract(p.xz / 2.) - .5);
-			alb *= mix(abs(p.x) < 14. && abs(p.z) < 11. ? 1.6 - .5 * smoothstep(.5 - fw, .5, max(g.x, g.y)) * exp(-fw * 8.) : .6, .25, bp);
-			g = abs(fract(p.xz) - .5);
-			e = (smoothstep(.5 - fw, .5, max(g.x, g.y)) * .25 * exp(-fw * 8.) + (1. - smoothstep(0., .06 + fw, abs(max(abs(p.x) - 7., abs(p.z) - 5.))))
-				* step(atan(p.z, p.x), T * 2.1 - 3.14)) * bp * smoothstep(0., 1., T);
+		vec3 col = sky(rd), p = ro + rd * t;
+		Q = 1.;
+		if (t < tm) {
+			float m = M, e = E;
+			vec4 g = G;
+			vec2 h = vec2(.001, -.001) * Z;
+			vec3 n = normalize(h.xyy * map(p + h.xyy) + h.yyx * map(p + h.yyx) + h.yxy * map(p + h.yxy) + h.xxx * map(p + h.xxx));
+			// soft shadow towards the sun
+			float sh = 1., s = .05 * Z;
+			for (int i = 0; i < (B < 62. ? 40 : 24); i++) {   // (the building's thin parts need 40 steps)
+				d = map(p + n * .01 * Z + L * s);
+				if (M < 9.)
+					sh = min(sh, 12. * d / s);
+				s += clamp(d, .05 * Z, 1.5 * Z);
+				if (sh < .01 || s > 40. * Z)
+					break;
+			}
+			sh = clamp(sh, 0., 1.);
+			float ao = 1.;
+			for (float k = 1.; k < 4.; k++)
+				ao -= (k * .15 - map(p + n * k * .15 * Z) / Z) / k;
+			ao = clamp(ao, 0., 1.);
+			vec3 alb = m < 1. ? vec3(.3, .3, .32) : m < 2. ? vec3(.62, .6, .57) : m < 3. ? vec3(.12, .13, .15) : m < 4. ? vec3(.02, .025, .03)
+				: .5 + .5 * cos(6.28 * (g.w * .9 + g.y * .5 + vec3(.1, .3, .5)));
+			if (m < 1.) {   // ground: plaza with joints, the blueprint grid at the start
+				float fw = .02 + t / u.z / abs(rd.y), bp = 1. - grow(6., 4.);   // joint width (a pixel's footprint); blueprint fade
+				vec2 g = abs(fract(p.xz / 2.) - .5);
+				alb *= mix(abs(p.x) < 14. && abs(p.z) < 11. ? 1.6 - .5 * smoothstep(.5 - fw, .5, max(g.x, g.y)) * exp(-fw * 8.) : .6, .25, bp);
+				g = abs(fract(p.xz) - .5);
+				e = (smoothstep(.5 - fw, .5, max(g.x, g.y)) * .25 * exp(-fw * 8.) + (1. - smoothstep(0., .06 + fw, abs(max(abs(p.x) - 7., abs(p.z) - 5.))))
+					* step(atan(p.z, p.x), T * 2.1 - 3.14)) * bp * smoothstep(0., 1., T);
+			}
+			vec3 sun = vec3(1.3, .95, .7) * (1. - N * .9);
+			col = alb * (sun * max(dot(n, L), 0.) * sh + sky(n) * .5 * ao);
+			if (m == 3.) {   // glass: dark rooms behind it, lit at dusk, and the sky reflected
+				float f = floor(p.y / 3.), c = floor((abs(p.x) > 6.8 ? p.z : p.x) / 1.4 + .5);
+				vec3 room = vec3(1, .65, .35) * step(.45, hash(vec2(f, c))) * grow(31. + f * .5 + hash(vec2(c, f)) * .5, .3) * (.15 + .6 * hash(vec2(c, f + 9.)));
+				float fr = .04 + .96 * pow(1. - abs(dot(n, rd)), 5.);
+				col = mix(room + alb, sky(reflect(rd, n)), fr) + sun * pow(max(dot(reflect(rd, n), L), 0.), 60.) * sh;
+			}
+			if (m < 1.)
+				col = mix(col, sky(rd), smoothstep(66., 70., B));
+			if (m < 1. && B > 33. && B < 64.)   // the tesseract mirrored in the plaza
+				col += hyper(p, reflect(rd, n), 1e3) * .15;
+			col += vec3(.3, .75, 1) * e * 2.;
+			col = mix(col, sky(rd), 1. - exp(-t * t * .00003 / Z / Z));
 		}
-		vec3 sun = vec3(1.3, .95, .7) * (1. - N * .9);
-		col = alb * (sun * max(dot(n, L), 0.) * sh + sky(n) * .5 * ao);
-		if (m == 3.) {   // glass: dark rooms behind it, lit at dusk, and the sky reflected
-			float f = floor(p.y / 3.), c = floor((abs(p.x) > 6.8 ? p.z : p.x) / 1.4 + .5);
-			vec3 room = vec3(1, .65, .35) * step(.45, hash(vec2(f, c))) * grow(31. + f * .5 + hash(vec2(c, f)) * .5, .3) * (.15 + .6 * hash(vec2(c, f + 9.)));
-			float fr = .04 + .96 * pow(1. - abs(dot(n, rd)), 5.);
-			col = mix(room + alb, sky(reflect(rd, n)), fr) + sun * pow(max(dot(reflect(rd, n), L), 0.), 60.) * sh;
+		if (B > 33. && B < 64.)
+			col += hyper(ro, rd, t) * smoothstep(33., 34.5, B) * (W < 99. ? .4 : 1.);
+		if (W < 99.) {   // the slice by the hyperplane w = W: a convex polytope (the ray against 4 slabs),
+			// glass tinted by the cells it cuts, with bright edges
+			float k = (14.4 - W) / 14.4;
+			vec4 y = transpose(R) * vec4((ro - C) * k, W), z = transpose(R) * vec4(rd * k, 0), a = (-A - y) / z, b = (A - y) / z, f = min(a, b), g = max(a, b);
+			float t0 = max(max(f.x, f.y), max(f.z, f.w)), t1 = min(min(g.x, g.y), min(g.z, g.w));
+			if (t0 < t1 && t0 > 0. && t0 < t) {
+				a = step(t0, f);   // the cells where the ray enters and leaves
+				b = step(g, vec4(t1));
+				f = t0 - f + a * 1e9;   // (an edge: another cell close)
+				g = g - t1 + b * 1e9;
+				col = col * .5 + X * (a * .25 + b * .1) * (.4 + .6 * (1. - exp(-(t1 - t0) * .3)))
+					+ exp(-min(min(f.x, f.y), min(f.z, f.w)) / t0 * 400.) + exp(-min(min(g.x, g.y), min(g.z, g.w)) / t1 * 400.) * .5;
+			}
 		}
-		if (m < 1.)
-			col = mix(col, sky(rd), smoothstep(66., 70., B));
-		if (m < 1. && B > 33. && B < 64.)   // the tesseract mirrored in the plaza
-			col += hyper(p, reflect(rd, n), 1e3) * .15;
-		col += vec3(.3, .75, 1) * e * 2.;
-		col = mix(col, sky(rd), 1. - exp(-t * t * .00003 / Z / Z));
+		col = 1. - exp(-col * 1.4);
+		cs += pow(col, vec3(.4545)) * (1. - .15 * dot(uv, uv));
+		j = vec2(j.y, -j.x);
 	}
-	if (B > 33. && B < 64.)
-		col += hyper(ro, rd, t) * smoothstep(33., 34.5, B) * (W < 99. ? .4 : 1.);
-	if (W < 99.) {   // the slice by the hyperplane w = W: a convex polytope (the ray against 4 slabs),
-		// glass tinted by the cells it cuts, with bright edges
-		float k = (14.4 - W) / 14.4;
-		vec4 y = transpose(R) * vec4((ro - C) * k, W), z = transpose(R) * vec4(rd * k, 0), a = (-A - y) / z, b = (A - y) / z, f = min(a, b), g = max(a, b);
-		float t0 = max(max(f.x, f.y), max(f.z, f.w)), t1 = min(min(g.x, g.y), min(g.z, g.w));
-		if (t0 < t1 && t0 > 0. && t0 < t) {
-			a = step(t0, f);   // the cells where the ray enters and leaves
-			b = step(g, vec4(t1));
-			f = t0 - f + a * 1e9;   // (an edge: another cell close)
-			g = g - t1 + b * 1e9;
-			col = col * .5 + X * (a * .25 + b * .1) * (.4 + .6 * (1. - exp(-(t1 - t0) * .3)))
-				+ exp(-min(min(f.x, f.y), min(f.z, f.w)) / t0 * 400.) + exp(-min(min(g.x, g.y), min(g.z, g.w)) / t1 * 400.) * .5;
-		}
-	}
-	col = 1. - exp(-col * 1.4);
-	o = vec4(pow(col, vec3(.4545)) * (1. - .15 * dot(uv, uv)) * clamp((104. - B) / 3., 0., 1.), 1);   // (the end: fade out)
+	o = vec4(cs / ns * clamp((104. - B) / 3., 0., 1.), 1);   // (the end: fade out)
 }

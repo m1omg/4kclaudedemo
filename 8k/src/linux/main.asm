@@ -315,6 +315,9 @@ _start:
 .kset:
 	cmp r15d, 16
 	setb r13b                   ; r13 = 1: render into framebuffer object 1 and upscale
+	jb .noss
+	mov dword [uni + 12], __float32__(1.0)   ; full size: u.w = 1, the shader may
+.noss:                          ; take 4 samples per pixel where that is cheap
 	call rescale
 %ifdef SHOWK                    ; (testing: print k to stderr)
 	mov eax, r15d

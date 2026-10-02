@@ -7,7 +7,9 @@
 // the rectangle), not glCreateShaderProgramv (4.1).
 // Weak GPUs: a short offscreen speed test picks the render size k/16 of the
 // screen (never below KMIN/16); below 16/16 the frames are rendered into a
-// framebuffer object and upscaled to the window. Fast GPUs render as before.
+// framebuffer object and upscaled to the window. Fast GPUs render at full size
+// and set u.w = 1: the shader then takes 4 samples per pixel where that is
+// cheap (the building).
 #include "../shaders.h"
 
 #define WINAPI __stdcall
@@ -137,6 +139,7 @@ void entrypoint(void)
 	for (k = 16; k > KMIN && dt * k * k > LIMIT * 128; k--)
 		;
 	int rfb = k < 16;   // 1: render into the framebuffer object, then upscale
+	uni[3] = !rfb;      // full size: the shader may take 4 samples per pixel where that is cheap
 	sw = w * k / 16;
 	sh = h * k / 16;
 	uni[1] = sw;

@@ -39,11 +39,21 @@ akordom Cmaj7.
 
 | Súbor | Platforma | Veľkosť |
 |---|---|---|
-| [`dist/rozmery-windows.exe`](dist/rozmery-windows.exe) | Windows (32-bit exe, beží aj na 64-bit) | 6424 B |
-| [`dist/rozmery-linux`](dist/rozmery-linux) | Linux x86-64 (glibc) | 7341 B |
-| [`dist/rozmery-macos`](dist/rozmery-macos) | macOS 10.13+ na Intel Macu | 7507 B |
+| [`dist/rozmery-windows.exe`](dist/rozmery-windows.exe) | Windows (32-bit exe, beží aj na 64-bit) | 6498 B |
+| [`dist/rozmery-linux`](dist/rozmery-linux) | Linux x86-64 (glibc) | 7413 B |
+| [`dist/rozmery-macos`](dist/rozmery-macos) | macOS 10.13+ na Intel Macu | 7573 B |
 
 ### Zmeny v tejto verzii
+
+- Na výkonnej grafike je budova ostrejšia: keď demo beží v plnom rozlíšení,
+  každý pixel sa v prvej časti počíta zo 4 vzoriek (supersampling), takže
+  hrany budovy, stĺpikov a schodiska nie sú zubaté a pri pohybe kamery sa
+  nemihocú. Platí to od začiatku po strih v 46. takte (budova, jej rozobratie
+  a zrod teseraktu), tam sa zmena nedá postrehnúť. Podľa meraní sú takéto
+  snímky stále rýchlejšie než najnáročnejšie miesto letu. Slabšia grafika,
+  ktorá kreslí v menšom rozlíšení, ostáva bez zmeny.
+
+### Predchádzajúce verzie
 
 - Let nad Mandelbulbom už nejde rovno po hrádzi, kde krásne útvary zostávali
   len po bokoch. Trasa sa kľukatí priamo pomedzi ne — les púčikov, veže,
@@ -52,9 +62,6 @@ akordom Cmaj7.
   Mandelbulbu, výška letu sleduje terén tesne nad ním (`tools/flypath.py`).
 - Rýchlosť grafiky sa pri štarte meria v novom najnáročnejšom mieste dema
   (v údolí počas letu).
-
-### Predchádzajúca verzia
-
 - Opravená chyba vykresľovania budovy: svetelné šmuhy a „duchovia" schodov v
   jej tieni na námestí (lúče tieňov končili príliš skoro) a drobné bodky na
   fasáde a pri základni (odhad vzdialenosti v niektorých miestach prestrelil:
@@ -77,7 +84,8 @@ GPU, 3:20 stereo), preto je chvíľu čierna obrazovka.
 Všetky tri verzie pri štarte zmerajú rýchlosť grafiky na najnáročnejšom
 mieste dema (údolie počas letu nad Mandelbulbom). Na slabšej grafike
 vykresľujú v menšom rozlíšení, najmenej 11/16 obrazovky v každom smere, a
-obraz plynulo zväčšia na celú obrazovku. Na výkonnej grafike bežia v plnom rozlíšení.
+obraz plynulo zväčšia na celú obrazovku. Na výkonnej grafike bežia v plnom
+rozlíšení a budovu kreslia so 4 vzorkami na pixel (vyhladené hrany).
 Animácia ide podľa času (podľa prehrávanej hudby), nie podľa počtu snímok,
 takže nezávisí od obnovovacej frekvencie monitora.
 
@@ -145,6 +153,10 @@ llvmpipe, virtuálne zvukové zariadenia):
 - Kamera sa pri lete nikdy nedotkne povrchu fraktálu a otáča sa plynulo, bez
   trhnutí: dráha aj natočenie kamery sú overené výpočtom v plnej presnosti
   (`tools/flypath.py`).
+- Vyhladzovanie budovy (4 vzorky na pixel) sa v testovacom prostredí samo
+  nezapne, lebo llvmpipe je príliš pomalé. Overil som ho na testovacích
+  verziách, ktoré si plné rozlíšenie vynútia: Linux aj Windows (Wine) vykreslia snímku presne rovnako ako
+  náhľad s vyhladzovaním, macOS (macsim) ho zapne a beží správne.
 
 Na skutočných grafikách (NVIDIA, AMD, Intel) demo zatiaľ nebežalo. Shadery
 dodržiavajú pravidlá, ktoré sa ukázali ako dôležité pri 4K intre na NVIDIA
@@ -166,6 +178,9 @@ okolo 15,5 ms na snímku v najnáročnejšom mieste (údolie počas letu).
   v 4D a premietnutých perspektívou do 3D, hrany ako žiariace čiary, steny
   priesvitné; rez nadrovinou je konvexný mnohosten, ktorý sa pretína s lúčom
   presne (4 „pásy" v 4D). Mandelbulb má mocninu 8 a farby z orbit trapu.
+  Na rýchlej grafike sa prvá časť dema počíta so 4 vzorkami na pixel v
+  pootočenej mriežke a ich výsledné farby sa spriemerujú (ako keby sa obraz
+  vykreslil v dvojnásobnom rozlíšení a zmenšil).
   Dráhu letu som navrhol podľa mapy výšky jeho povrchu: trasa vedie cez body
   vybrané na mape, výška letu je vyhladený terén pod trasou plus malá výška
   (kamera začne stúpať ešte pred kopcom). Kamera hľadí dopredu po trase a v
