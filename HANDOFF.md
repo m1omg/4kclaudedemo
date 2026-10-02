@@ -369,7 +369,8 @@ Steps (each one a PR):
   Everything goes through dlopen/dlsym; `tools/mac/libSystem.tbd` adds
   `dyld_stub_binder` for compiled C.
 - It renders offscreen into an FBO of the screen size and times with
-  `glFinish`, so the refresh rate does not matter. Printed:
+  `glFinish`, so the refresh rate does not matter. Round 1 printed (round 2
+  below):
   - GL strings;
   - music render time, in one draw and in 8 bands, and whether the bands are
     bit-identical;
@@ -386,15 +387,96 @@ Steps (each one a PR):
   that GPU is far from any scaling. Freeglut itself raises one
   `GL_INVALID_ENUM` at start-up in a core context.
 
+**Mac round 1 (2026-10-02, the owner's MacBook Air):** Intel HD Graphics 6000,
+`4.1 INTEL-18.8.16`, screen 1440x900 (not Retina). `macbench`, ms per frame:
+
+| variant | 0:12 | 0:26 | 0:40 | 1:00 | 1:28 | 1:40 | 1:56 | 2:12 | weighted |
+|---|---|---|---|---|---|---|---|---|---|
+| current, 1440x900 | 13.6 | 13.1 | 11.0 | 16.1 | 26.3 | 15.6 | 15.6 | 11.8 | 15.4 |
+| current, 720x450 | 3.7 | 3.6 | 3.0 | 4.4 | 7.1 | 4.3 | 4.3 | 3.2 | 4.2 |
+| `core_bound`, 1440x900 | 16.0 | 15.3 | 13.3 | 21.3 | 22.5 | 20.6 | 20.7 | 15.6 | 18.5 |
+| `all`, 1440x900 | 18.0 | 17.4 | 13.8 | 19.5 | 20.7 | 18.9 | 19.0 | 14.6 | 17.9 |
+
+- On paper the current shader reaches the goal at full resolution: worst moment
+  (the core) 26 ms, i.e. about 38 fps; everything else 11–16 ms. The "few
+  fps" was the build before PR #4.
+- **But the owner then ran the intro: "better, esp. the spires, but the
+  tunnels and esp. the atom (the core) go chop chop".** On a 60 Hz display a
+  16 ms tunnel frame keeps missing the refresh, and the core runs at about
+  30 fps at best.
+- **Round 1 was probably distorted by heat.** The variants were measured one
+  after another, and the later ones measured slower even where they do
+  strictly less work (`ao3`, `refl60`: +15 to +30 % in every scene). A
+  MacBook Air slows its GPU down as it heats up, and the intro runs 2:26
+  without a break. So round 1's variant ranking is unreliable, and the real
+  intro is slower than the `current` row, most of all in its second half.
+- The Mac speed test (`-DSCALE`) would read 7–8 ms → k = 16 (full size)
+  when cold.
+- The owner says the test builds from `tools/mac/test.sh` "ran better" than
+  the release (2026-10-02). Two of them, `scale` and `all`, have the automatic
+  resolution; after several runs the Mac was probably hot enough for their
+  speed test to pick k < 16.
+- Music: 80 ms render + 177 ms readback; 8 bands are identical to one draw.
+- Uniform location of `u` is 0, short framework paths load, RGBA8 and RGBA32F
+  render targets and the re-specified attached texture all work (11/16:
+  8.4 ms render, blit 0.6 / 1.1 ms). No GL errors.
+- Still to come from the owner: the `test.sh` result lines (which container
+  variants start), `./macbench look`.
+
+**Round 2 (2026-10-02; `tools/mac/variants.py`, `macbench`):**
+- `./macbench` now:
+  - heats the GPU up for 30 s (the core at full size) and prints how the
+    frame time drifts;
+  - runs the intro's own speed test (fastest of 3 half-size frames in whole
+    ms, `LIMIT` 2304) before and after the heating;
+  - measures every variant at 10 moments, taking turns, in 3 rounds (the
+    fastest round counts), so heat affects all variants alike.
+- `./macbench play [variant] [k]` plays the visuals in real time (2:26, no
+  sound) at k/16 and prints fps, the share of frames over 20 ms and the
+  slowest frame per scene.
+- New variants:
+  - `core_hoist`: the core's 7 ring rotations are computed once per pixel in
+    `main()` (`mat2 R[6], Y`), not in every `map()`. Identical image
+    (≤ 1 level). On the RTX 3060 at 3840x2160 it makes the core **28 %
+    faster**: NVIDIA's compiler does not move them out of the march loop. So
+    the old note "the compiler already hoists" (below) is not true for this.
+  - `core_inc`: the same rotations by angle addition. A few pixels differ;
+    only 7 % faster on NVIDIA.
+  - `tun_hoist`: the tunnels' `n` and `l` (with `tan`) once per pixel.
+    Identical; no gain on NVIDIA.
+  - `core_bound` (from round 1), re-checked: 32 % faster on NVIDIA, but not
+    identical. The outermost ring's thin neon line shifts by about a pixel
+    (0.3 % of the core's pixels differ by more than 2 levels, mean 0.14
+    levels).
+  - `opt` = `core_bound` + `core_hoist` + `tun_hoist`: the core 46 % faster
+    on NVIDIA. `opt_inc` is the same with `core_inc`.
+- **The core's heaviest moment is 1:32, not 1:28** (`T_HEAVY`). On NVIDIA at
+  3840x2160: 1:20 6.1 ms, 1:28 6.6, 1:30 7.5, **1:32 8.7**, 1:34 7.4. At 1:32
+  the camera passes the outer ring. With `opt` the spread is larger (1:28 3.3
+  ms, 1:32 5.3).
+- The Linux twin runs invisibly in headless gamescope:
+  `gamescope --backend headless -W 1440 -H 900 -w 1440 -h 900 -- build/mac/macbench-linux`.
+
 **Tried and rejected:**
 - Hit threshold `.001*t` instead of `.0005*t`: almost no fewer steps, and
   about 1 % of tunnel pixels changed.
-- Hoisting the tunnel's `tan()`/`n`/`l` out of `map()`: no measurable gain;
-  the compiler already hoists them.
+- Hoisting the tunnel's `tan()`/`n`/`l` out of `map()`: no measurable gain
+  on NVIDIA and llvmpipe (`tun_hoist` above). The core's rotations are
+  another story (`core_hoist` above).
 
 ---
 
 ## 4. Other known issues and loose ends
+
+- **Windows under Steam (parked by the owner on 2026-10-02).** Added as a
+  non-Steam game (Steam's default `proton-cachyos-slr`), the Windows build
+  picks k = 11 on the owner's RTX 3060. Its speed test measured about 99 ms
+  per full frame there, over 0.5 s. So inside Steam it really renders slowly,
+  probably in software inside Steam's runtime container. Unconfirmed: a debug
+  build that records `GL_RENDERER` was never run there. The same Proton
+  started by hand with the same runtime gives k = 16 at about 4 ms. A more
+  robust speed test (the fastest of several batches, at most 0.5 s) was
+  drafted but not merged; it would not help if the renderer is software.
 
 - **Windows was never run on real Windows**, only under Wine (9.0 with
   llvmpipe; 11.18 with the NVIDIA driver, PR #6).
