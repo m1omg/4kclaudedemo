@@ -3,6 +3,7 @@
 **ROZMERY** je 8K demo pre **Windows**, **Linux** a **macOS (Intel)**. Každá
 verzia je jeden spustiteľný súbor s veľkosťou **do 8192 bajtov**, ktorý počas
 behu vypočíta všetko — 3D grafiku aj hudbu. Demo trvá **3:20**.
+Zhustená verzia do 4096 bajtov je [ROZMERY 4K](../rozmery4k/README.md).
 
 1. **Budova sa postaví sama.** Najprv sa na zemi nakreslí jej pôdorys ako
    modrotlač, potom z námestia vyrastie základová doska, stĺpy rastú poschodie

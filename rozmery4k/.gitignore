@@ -1,0 +1,5 @@
+build/
+src/shaders.h
+src/shaders.inc
+src/shaders.h.*
+__pycache__/
