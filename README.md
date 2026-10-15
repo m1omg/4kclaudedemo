@@ -18,8 +18,8 @@ a na konci sa vráti na horizont, kde sa všetko pomaly ponorí späť do tmy.
 Hotové súbory všetkých troch diel (BRÁNA, [ROZMERY 4K](rozmery4k/README.md)
 a [ROZMERY 8K](8k/README.md)) sú aj v
 [Releases](https://github.com/m1omg/4kclaudedemo/releases) ako zip pre každé
-demo. Release vytvára workflow `.github/workflows/release.yml` (spúšťa sa
-ručne) z binárok v `dist/` a znovu overí ich veľkosti.
+demo. Release vytvára workflow `.github/workflows/release.yml` (spustí ho
+push tagu `v*` alebo ručné spustenie) z binárok v `dist/` a znovu overí ich veľkosti.
 
 ## Spustenie
 
