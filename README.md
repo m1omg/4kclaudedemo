@@ -15,6 +15,12 @@ a na konci sa vráti na horizont, kde sa všetko pomaly ponorí späť do tmy.
 | [`dist/brana-linux`](dist/brana-linux) | Linux x86-64 (glibc) | 4090 B |
 | [`dist/brana-macos`](dist/brana-macos) | macOS 10.13+ na Intel Macu | 4048 B |
 
+Hotové súbory všetkých troch diel (BRÁNA, [ROZMERY 4K](rozmery4k/README.md)
+a [ROZMERY 8K](8k/README.md)) sú aj v
+[Releases](https://github.com/m1omg/4kclaudedemo/releases) ako zip pre každé
+demo. Release vytvára workflow `.github/workflows/release.yml` (spúšťa sa
+ručne) z binárok v `dist/` a znovu overí ich veľkosti.
+
 ## Spustenie
 
 Intro sa kedykoľvek ukončí klávesom **ESC** (na Linuxe a macOS ktoroukoľvek
