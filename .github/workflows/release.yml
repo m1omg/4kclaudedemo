@@ -1,0 +1,38 @@
+# Publishes the binaries committed in dist/ as a GitHub release.
+# Run by hand: Actions -> release -> Run workflow. Nothing is rebuilt here
+# (the build needs Crinkler and an OpenGL X server), the files are taken as
+# they are in the repository and their size limits are checked again.
+name: release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag of the new release
+        required: true
+        default: v1.0
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check sizes
+        run: |
+          check() { n=$(wc -c < "$1"); echo "$1 $n"; [ "$n" -le "$2" ]; }
+          for f in dist/* rozmery4k/dist/*; do check "$f" 4096; done
+          for f in 8k/dist/*; do check "$f" 8192; done
+      - name: Pack
+        run: |
+          mkdir out
+          zip -j out/brana-4k.zip dist/* LICENSE
+          zip -j out/rozmery-4k.zip rozmery4k/dist/* LICENSE
+          zip -j out/rozmery-8k.zip 8k/dist/* LICENSE
+          cp dist/* rozmery4k/dist/* 8k/dist/* out/
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ inputs.tag }}" out/* \
+            --target "$GITHUB_SHA" --title "${{ inputs.tag }}" \
+            --notes-file .github/release-notes.md
